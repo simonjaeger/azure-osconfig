@@ -187,6 +187,7 @@ bool UsersExecuteChef(const char* action, const char* username, const char* comm
 
     json_object_set_value(rootObject, "properties", propertiesValue);
 
+    // TODO: Loop this.
     json_object_set_string(propertiesObject, "username", username);
 
     if (NULL != comment)
