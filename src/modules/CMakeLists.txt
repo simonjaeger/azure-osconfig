@@ -58,6 +58,7 @@ add_module(HostName)
 add_module(Networking)
 add_module(Pmc)
 add_module(Tpm)
+add_module(Users)
 add_module(Ztsi)
 
 if (BUILD_SAMPLES)

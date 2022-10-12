@@ -1,0 +1,21 @@
+{
+  "name": "UsersConfigurationModel",
+  "type": "mimModel",
+  "contents": [
+    {
+      "name": "UsersConfiguration",
+      "type": "mimComponent",
+      "contents": [
+        {
+          "name": "desiredUsers",
+          "type": "mimObject",
+          "desired": true,
+          "schema": {
+            "type": "array",
+            "elementSchema": "..."
+          }
+        }
+      ]
+    }
+  ]
+}

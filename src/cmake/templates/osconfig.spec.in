@@ -94,6 +94,7 @@ rm /etc/aziot/identityd/config.d/osconfig.toml >/dev/null || true
 /usr/lib/osconfig/networking.so
 /usr/lib/osconfig/pmc.so
 /usr/lib/osconfig/tpm.so
+/usr/lib/osconfig/users.so
 /usr/lib/osconfig/ztsi.so
 
 % changelog
