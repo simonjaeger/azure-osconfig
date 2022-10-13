@@ -165,42 +165,32 @@ int UsersMmiGet(MMI_HANDLE clientSession, const char* componentName, const char*
     // return status;
 }
 
-bool UsersExecuteChef(const char* action, const char* username, const char* comment, const char* shell)
+bool UsersExecuteChef(const char* resourceClass, const char* resourceName, const char* action, const JSON_Object* propertiesObject)
 {
     JSON_Value *rootValue = NULL;
     JSON_Object *rootObject = NULL;
     JSON_Value *propertiesValue = NULL;
-    JSON_Object *propertiesObject = NULL;
+    JSON_Value *copiedPropertiesValue = NULL;
 
     int error = 0;
-    const char* command = "cat /tmp/tmp.json | ruby /usr/lib/osconfig/chef-exec.rb";
+    const char* command = "cat /tmp/osconfig-chef-exec-tmp.json | ruby /usr/lib/osconfig/chef-exec.rb";
 
     rootValue = json_value_init_object();
     rootObject = json_value_get_object(rootValue);
 
-    json_object_set_string(rootObject, "resource_class", "user");
-    json_object_set_string(rootObject, "resource_name", username);
-    json_object_set_string(rootObject, "action", action);
+    json_object_set_string(rootObject, "resource_class", resourceClass);
+    json_object_set_string(rootObject, "resource_name", resourceName);
 
-    propertiesValue = json_value_init_object();
-    propertiesObject = json_value_get_object(propertiesValue);
-
-    json_object_set_value(rootObject, "properties", propertiesValue);
-
-    // TODO: Loop this.
-    json_object_set_string(propertiesObject, "username", username);
-
-    if (NULL != comment)
+    if (NULL != action)
     {
-        json_object_set_string(propertiesObject, "comment", comment);
+        json_object_set_string(rootObject, "action", action);
     }
 
-    if (NULL != shell)
-    {
-        json_object_set_string(propertiesObject, "shell", shell);
-    }
+    propertiesValue = json_object_get_wrapping_value(propertiesObject);
+    copiedPropertiesValue = json_value_deep_copy(propertiesValue);
+    json_object_set_value(rootObject, "properties", copiedPropertiesValue);
 
-    json_serialize_to_file(rootValue, "/tmp/tmp.json");
+    json_serialize_to_file(rootValue, "/tmp/osconfig-chef-exec-tmp.json");
 
     json_value_free(rootValue);
 
@@ -220,10 +210,10 @@ int UsersMmiSet(MMI_HANDLE clientSession, const char* componentName, const char*
     JSON_Array* rootArray = NULL;
     JSON_Object* currentObject = NULL;
 
-    const char* action = NULL;
-    const char* username = NULL;
-    const char* comment = NULL;
-    const char* shell = NULL;
+    const char* resourceClass = "user";
+    const char* resourceName = NULL;
+    int actionSizeBytes = 0;
+    char* action = NULL;
 
     if ((NULL == componentName) || (NULL == objectName) || (NULL == payload) || (payloadSizeBytes <= 0))
     {
@@ -260,14 +250,21 @@ int UsersMmiSet(MMI_HANDLE clientSession, const char* componentName, const char*
                 for (unsigned int i = 0; i < json_array_get_count(rootArray); i++)
                 {
                     currentObject = json_array_get_object(rootArray, i);
-                    action = json_object_get_string(currentObject, "action");
-                    username = json_object_get_string(currentObject, "username");
-                    comment = json_object_get_string(currentObject, "comment");
-                    shell = json_object_get_string(currentObject, "shell");
-
-                    if (false == UsersExecuteChef(action, username, comment, shell))
+                    resourceName = json_object_get_string(currentObject, "username");
+                    
+                    actionSizeBytes = json_object_get_string_len(currentObject, "action") + 1;
+                    action = malloc(actionSizeBytes);
+                    if (NULL != action)
                     {
-                        OsConfigLogError(UsersGetLog(), "MmiSet failed to create user '%s'", (NULL != username) ? username : "");
+                        memset(action, 0, actionSizeBytes);
+                        memcpy(action, json_object_get_string(currentObject, "action"), actionSizeBytes);
+
+                        json_object_remove(currentObject, "action");
+
+                        if (false == UsersExecuteChef(resourceClass, resourceName, action, currentObject))
+                        {
+                            OsConfigLogError(UsersGetLog(), "MmiSet failed to execute Chef (resource_class = '%s', resource_name = '%s', action = '%s')", (NULL != resourceClass) ? resourceClass : "", (NULL != resourceName) ? resourceName : "", (NULL != action) ? action : "");
+                        }
                     }
                 }
             }
@@ -281,6 +278,7 @@ int UsersMmiSet(MMI_HANDLE clientSession, const char* componentName, const char*
         json_value_free(rootValue);
     }
 
+    FREE_MEMORY(action);
     FREE_MEMORY(buffer);
 
     return status;
