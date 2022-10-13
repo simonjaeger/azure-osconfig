@@ -84,29 +84,6 @@ bool UsersExecuteChef(const char* resourceClass, const char* resourceName, const
         OsConfigLogError(UsersGetLog(), "UsersExecuteChef failed with error (%d)", error);
     }
 
-    // State state = State::Unknown;
-    // char* textResult = nullptr;
-
-    // if ((0 == ExecuteCommand(nullptr, command, false, false, 0, 0, &textResult, nullptr, FirewallLog::Get())))
-    // {
-    //     if (textResult && (strlen(textResult) > 0))
-    //     {
-    //         int ruleCount = atoi(textResult);
-    //         state = (ruleCount > 0) ? State::Enabled : State::Disabled;
-    //     }
-    //     else
-    //     {
-    //         state = State::Disabled;
-    //     }
-    // }
-    // else
-    // {
-    //     state = State::Disabled;
-    // }
-
-    // if (0 != (error = system(command)))
-    // {
-    // }
     return (0 == error);
 }
 
