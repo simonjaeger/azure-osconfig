@@ -79,7 +79,7 @@ bool UsersExecuteChef(const char* resourceClass, const char* resourceName, const
 
     json_value_free(rootValue);
 
-    if (0 != ExecuteCommand(NULL, command, false, false, 0, 0, result, NULL, UsersGetLog()))
+    if (0 != (error = ExecuteCommand(NULL, command, false, false, 0, 0, result, NULL, UsersGetLog())))
     {
         OsConfigLogError(UsersGetLog(), "UsersExecuteChef failed with error (%d)", error);
     }
