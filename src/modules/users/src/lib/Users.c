@@ -196,7 +196,7 @@ bool UsersExecuteChef(const char* resourceClass, const char* resourceName, const
 
     if (0 != (error = system(command)))
     {
-        OsConfigLogError(UsersGetLog(), "Status = %d", error);
+        OsConfigLogError(UsersGetLog(), "UsersExecuteChef failed with error (%d)", error);
     }
     return (0 == error);
 }
@@ -252,19 +252,27 @@ int UsersMmiSet(MMI_HANDLE clientSession, const char* componentName, const char*
                     currentObject = json_array_get_object(rootArray, i);
                     resourceName = json_object_get_string(currentObject, "username");
                     
-                    actionSizeBytes = json_object_get_string_len(currentObject, "action") + 1;
-                    action = malloc(actionSizeBytes);
-                    if (NULL != action)
+                    if (json_object_has_value_of_type(currentObject, "action", JSONString))
                     {
-                        memset(action, 0, actionSizeBytes);
-                        memcpy(action, json_object_get_string(currentObject, "action"), actionSizeBytes);
-
-                        json_object_remove(currentObject, "action");
-
-                        if (false == UsersExecuteChef(resourceClass, resourceName, action, currentObject))
+                        actionSizeBytes = json_object_get_string_len(currentObject, "action") + 1;
+                        action = malloc(actionSizeBytes);
+                        if (NULL != action)
                         {
-                            OsConfigLogError(UsersGetLog(), "MmiSet failed to execute Chef (resource_class = '%s', resource_name = '%s', action = '%s')", (NULL != resourceClass) ? resourceClass : "", (NULL != resourceName) ? resourceName : "", (NULL != action) ? action : "");
+                            memset(action, 0, actionSizeBytes);
+                            memcpy(action, json_object_get_string(currentObject, "action"), actionSizeBytes);
                         }
+                    }
+                    else 
+                    {
+                        action = NULL;
+                    }
+
+                    json_object_remove(currentObject, "action");
+                    
+                    if (false == UsersExecuteChef(resourceClass, resourceName, action, currentObject))
+                    {
+                        OsConfigLogError(UsersGetLog(), "MmiSet failed to execute Chef (resource_class = '%s', resource_name = '%s', action = '%s')", (NULL != resourceClass) ? resourceClass : "", (NULL != resourceName) ? resourceName : "", (NULL != action) ? action : "");
+                        status = EINVAL;
                     }
                 }
             }

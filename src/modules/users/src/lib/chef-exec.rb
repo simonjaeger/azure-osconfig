@@ -20,7 +20,7 @@ platform = input["platform"] || "linux"
 platform_family = input["platform_family"]
 platform_version = input["platform_version"]
 properties = input["properties"] || {}
-action = input["action"] || :nothing # TODO: Use default.
+action = input["action"]
 
 # Create node with platform information used by resolvers. 
 node = Chef::Node.new 
@@ -36,6 +36,9 @@ run_context = Chef::RunContext.new(node, {}, events)
 resource_class = Chef::ResourceResolver.resolve(resource_class, node: node) 
 resource = resource_class.new(resource_name, run_context) 
 
+# Use default action if nil.
+action = action || resource.action[0]
+
 # Configure resource.
 properties.each do |key, value|
     resource.public_send(key, value)
@@ -45,7 +48,7 @@ end
 resource.run_action(action)
 
 # Resolve provider class and create provider. 
-provider_resolver = Chef::ProviderResolver.new(node, resource, :nothing) 
+provider_resolver = Chef::ProviderResolver.new(node, resource, action) 
 provider_class = provider_resolver.resolve() 
 provider = provider_class.new(resource, run_context) 
 
