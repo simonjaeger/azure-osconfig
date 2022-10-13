@@ -1,6 +1,6 @@
 {
   "CommandLogging": 0,
-  "FullLogging": 0,
+  "FullLogging": 1,
   "LocalManagement": 0,
   "ModelVersion": 14,
   "IotHubProtocol": 2,
@@ -166,6 +166,10 @@
       "ObjectName": "tpmManufacturer"
     },
     {
+      "ComponentName": "Users",
+      "ObjectName": "janedoe"
+    },
+    {
       "ComponentName": "Ztsi",
       "ObjectName": "enabled"
     },
@@ -174,5 +178,5 @@
       "ObjectName": "serviceUrl"
     }
   ],
-  "ReportingIntervalSeconds": 30
+  "ReportingIntervalSeconds": 5
 }

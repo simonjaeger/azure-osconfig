@@ -28,6 +28,10 @@ static const char* g_usersComponentName = "Users";
 // static const char* g_reportedUsersObjectName = "users";
 static const char* g_desiredUsersObjectName = "desiredUsers";
 
+static const char *g_resourceClass= "user";
+static const char *g_jsonPropertyNameAction = "action";
+static const char *g_jsonPropertyNameUsername = "username";
+
 static atomic_int g_referenceCount = 0;
 static unsigned int g_maxPayloadSizeBytes = 0;
 
@@ -40,6 +44,70 @@ static OSCONFIG_LOG_HANDLE g_log = NULL;
 static OSCONFIG_LOG_HANDLE UsersGetLog()
 {
     return g_log;
+}
+
+
+bool UsersExecuteChef(const char* resourceClass, const char* resourceName, const char* action, const JSON_Object* propertiesObject, char** result)
+{
+    JSON_Value *rootValue = NULL;
+    JSON_Object *rootObject = NULL;
+    JSON_Value *propertiesValue = NULL;
+    JSON_Value *copiedPropertiesValue = NULL;
+
+    int error = 0;
+    const char* command = "cat /tmp/osconfig-chef-exec-tmp.json | ruby /usr/lib/osconfig/chef-exec.rb";
+
+    rootValue = json_value_init_object();
+    rootObject = json_value_get_object(rootValue);
+
+    json_object_set_string(rootObject, "resource_class", resourceClass);
+    json_object_set_string(rootObject, "resource_name", resourceName);
+
+    if (NULL != action)
+    {
+        json_object_set_string(rootObject, "action", action);
+    }
+
+    if (NULL != propertiesObject)
+    {
+        propertiesValue = json_object_get_wrapping_value(propertiesObject);
+        copiedPropertiesValue = json_value_deep_copy(propertiesValue);
+        json_object_set_value(rootObject, "properties", copiedPropertiesValue);
+    }
+
+    json_serialize_to_file(rootValue, "/tmp/osconfig-chef-exec-tmp.json");
+
+    json_value_free(rootValue);
+
+    if (0 != ExecuteCommand(NULL, command, false, false, 0, 0, result, NULL, UsersGetLog()))
+    {
+        OsConfigLogError(UsersGetLog(), "UsersExecuteChef failed with error (%d)", error);
+    }
+
+    // State state = State::Unknown;
+    // char* textResult = nullptr;
+
+    // if ((0 == ExecuteCommand(nullptr, command, false, false, 0, 0, &textResult, nullptr, FirewallLog::Get())))
+    // {
+    //     if (textResult && (strlen(textResult) > 0))
+    //     {
+    //         int ruleCount = atoi(textResult);
+    //         state = (ruleCount > 0) ? State::Enabled : State::Disabled;
+    //     }
+    //     else
+    //     {
+    //         state = State::Disabled;
+    //     }
+    // }
+    // else
+    // {
+    //     state = State::Disabled;
+    // }
+
+    // if (0 != (error = system(command)))
+    // {
+    // }
+    return (0 == error);
 }
 
 void UsersInitialize(const char* configFile)
@@ -120,85 +188,63 @@ int UsersMmiGetInfo(const char* clientName, MMI_JSON_STRING* payload, int* paylo
 
 int UsersMmiGet(MMI_HANDLE clientSession, const char* componentName, const char* objectName, MMI_JSON_STRING* payload, int* payloadSizeBytes)
 {
-    OsConfigLogInfo(UsersGetLog(), "No reported objects, MmiGet not implemented");
-    
-    UNUSED(clientSession);
-    UNUSED(componentName);
-    UNUSED(objectName);
-    UNUSED(payload);
-    UNUSED(payloadSizeBytes);
-    
-    return EPERM;
+    int status = MMI_OK;
 
-    // int status = MMI_OK;
+    char* result = NULL;
 
-    // if ((NULL == componentName) || (NULL == objectName) || (NULL == payload) || (NULL == payloadSizeBytes))
-    // {
-    //     OsConfigLogError(UsersGetLog(), "MmiGet(%s, %s, %p, %p) called with invalid arguments", componentName, objectName, payload, payloadSizeBytes);
-    //     status = EINVAL;
-    //     return status;
-    // }
-
-    // *payload = NULL;
-    // *payloadSizeBytes = 0;
-
-    // if (!IsValidSession(clientSession))
-    // {
-    //     OsConfigLogError(UsersGetLog(), "MmiGet(%s, %s) called outside of a valid session", componentName, objectName);
-    //     status = EINVAL;
-    // }
-    // else if (0 != strcmp(componentName, g_usersComponentName))
-    // {
-    //     OsConfigLogError(UsersGetLog(), "MmiGet called for an unsupported component name '%s'", componentName);
-    //     status = EINVAL;
-    // }
-    // else
-    // {
-    //     // TODO: ...
-    // }
-
-    // if (IsFullLoggingEnabled())
-    // {
-    //     OsConfigLogInfo(UsersGetLog(), "MmiGet(%p, %s, %s, %.*s, %d) returning %d", clientSession, componentName, objectName, *payloadSizeBytes, *payload, *payloadSizeBytes, status);
-    // }
-
-    // return status;
-}
-
-bool UsersExecuteChef(const char* resourceClass, const char* resourceName, const char* action, const JSON_Object* propertiesObject)
-{
-    JSON_Value *rootValue = NULL;
-    JSON_Object *rootObject = NULL;
-    JSON_Value *propertiesValue = NULL;
-    JSON_Value *copiedPropertiesValue = NULL;
-
-    int error = 0;
-    const char* command = "cat /tmp/osconfig-chef-exec-tmp.json | ruby /usr/lib/osconfig/chef-exec.rb";
-
-    rootValue = json_value_init_object();
-    rootObject = json_value_get_object(rootValue);
-
-    json_object_set_string(rootObject, "resource_class", resourceClass);
-    json_object_set_string(rootObject, "resource_name", resourceName);
-
-    if (NULL != action)
+    if ((NULL == componentName) || (NULL == objectName) || (NULL == payload) || (NULL == payloadSizeBytes))
     {
-        json_object_set_string(rootObject, "action", action);
+        OsConfigLogError(UsersGetLog(), "MmiGet(%s, %s, %p, %p) called with invalid arguments", componentName, objectName, payload, payloadSizeBytes);
+        status = EINVAL;
+        return status;
     }
 
-    propertiesValue = json_object_get_wrapping_value(propertiesObject);
-    copiedPropertiesValue = json_value_deep_copy(propertiesValue);
-    json_object_set_value(rootObject, "properties", copiedPropertiesValue);
+    *payload = NULL;
+    *payloadSizeBytes = 0;
 
-    json_serialize_to_file(rootValue, "/tmp/osconfig-chef-exec-tmp.json");
-
-    json_value_free(rootValue);
-
-    if (0 != (error = system(command)))
+    if (!IsValidSession(clientSession))
     {
-        OsConfigLogError(UsersGetLog(), "UsersExecuteChef failed with error (%d)", error);
+        OsConfigLogError(UsersGetLog(), "MmiGet(%s, %s) called outside of a valid session", componentName, objectName);
+        status = EINVAL;
     }
-    return (0 == error);
+    else if (0 != strcmp(componentName, g_usersComponentName))
+    {
+        OsConfigLogError(UsersGetLog(), "MmiGet called for an unsupported component name '%s'", componentName);
+        status = EINVAL;
+    }
+    else
+    {
+        if (true == UsersExecuteChef(g_resourceClass, objectName, "nothing", NULL, &result))
+        {
+            *payloadSizeBytes = strlen(result);
+            *payload = (MMI_JSON_STRING)malloc(*payloadSizeBytes);
+            if (NULL != *payload)
+            {
+                memset(*payload, 0, *payloadSizeBytes);
+                memcpy(*payload, result, *payloadSizeBytes);
+            }
+            else
+            {
+                OsConfigLogError(UsersGetLog(), "MmiGet: failed to allocate %d bytes", *payloadSizeBytes + 1);
+                *payloadSizeBytes = 0;
+                status = ENOMEM;
+            }
+        }
+        else 
+        {
+            OsConfigLogError(UsersGetLog(), "MmiGet failed to execute Chef (resource_class = '%s', resource_name = '%s', action = '%s')", g_resourceClass, (NULL != objectName) ? objectName : "", "nothing");
+            status = EINVAL;
+        }
+    }
+
+    if (IsFullLoggingEnabled())
+    {
+        OsConfigLogInfo(UsersGetLog(), "MmiGet(%p, %s, %s, %.*s, %d) returning %d", clientSession, componentName, objectName, *payloadSizeBytes, *payload, *payloadSizeBytes, status);
+    }
+
+    FREE_MEMORY(result);
+
+    return status;
 }
 
 int UsersMmiSet(MMI_HANDLE clientSession, const char* componentName, const char* objectName, const MMI_JSON_STRING payload, const int payloadSizeBytes)
@@ -210,7 +256,6 @@ int UsersMmiSet(MMI_HANDLE clientSession, const char* componentName, const char*
     JSON_Array* rootArray = NULL;
     JSON_Object* currentObject = NULL;
 
-    const char* resourceClass = "user";
     const char* resourceName = NULL;
     int actionSizeBytes = 0;
     char* action = NULL;
@@ -250,16 +295,16 @@ int UsersMmiSet(MMI_HANDLE clientSession, const char* componentName, const char*
                 for (unsigned int i = 0; i < json_array_get_count(rootArray); i++)
                 {
                     currentObject = json_array_get_object(rootArray, i);
-                    resourceName = json_object_get_string(currentObject, "username");
+                    resourceName = json_object_get_string(currentObject, g_jsonPropertyNameUsername);
                     
-                    if (json_object_has_value_of_type(currentObject, "action", JSONString))
+                    if (json_object_has_value_of_type(currentObject, g_jsonPropertyNameAction, JSONString))
                     {
-                        actionSizeBytes = json_object_get_string_len(currentObject, "action") + 1;
+                        actionSizeBytes = json_object_get_string_len(currentObject, g_jsonPropertyNameAction) + 1;
                         action = malloc(actionSizeBytes);
                         if (NULL != action)
                         {
                             memset(action, 0, actionSizeBytes);
-                            memcpy(action, json_object_get_string(currentObject, "action"), actionSizeBytes);
+                            memcpy(action, json_object_get_string(currentObject, g_jsonPropertyNameAction), actionSizeBytes);
                         }
                     }
                     else 
@@ -267,11 +312,11 @@ int UsersMmiSet(MMI_HANDLE clientSession, const char* componentName, const char*
                         action = NULL;
                     }
 
-                    json_object_remove(currentObject, "action");
+                    json_object_remove(currentObject, g_jsonPropertyNameAction);
                     
-                    if (false == UsersExecuteChef(resourceClass, resourceName, action, currentObject))
+                    if (false == UsersExecuteChef(g_resourceClass, resourceName, action, currentObject, NULL))
                     {
-                        OsConfigLogError(UsersGetLog(), "MmiSet failed to execute Chef (resource_class = '%s', resource_name = '%s', action = '%s')", (NULL != resourceClass) ? resourceClass : "", (NULL != resourceName) ? resourceName : "", (NULL != action) ? action : "");
+                        OsConfigLogError(UsersGetLog(), "MmiSet failed to execute Chef (resource_class = '%s', resource_name = '%s', action = '%s')", g_resourceClass, (NULL != resourceName) ? resourceName : "", (NULL != action) ? action : "");
                         status = EINVAL;
                     }
                 }
