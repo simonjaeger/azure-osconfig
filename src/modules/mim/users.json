@@ -6,15 +6,6 @@
       "name": "UsersConfiguration",
       "type": "mimComponent",
       "contents": [
-        {
-          "name": "desiredUsers",
-          "type": "mimObject",
-          "desired": true,
-          "schema": {
-            "type": "array",
-            "elementSchema": "..."
-          }
-        }
       ]
     }
   ]

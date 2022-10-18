@@ -9,6 +9,9 @@
 #include <Mmi.h>
 #include <regex.h>
 #include <parson.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 #include "Users.h"
 
@@ -32,6 +35,15 @@ static const char *g_resourceClass= "user";
 static const char *g_jsonPropertyNameAction = "action";
 static const char *g_jsonPropertyNameUsername = "username";
 
+static const char* g_searchCommand = "find '%s' -name '%s' -executable -maxdepth 1 | head -n 1 | tr -d '\n'";
+static const char *g_searchDirectories[] = {"/usr/local/sbin", "/usr/local/bin", "/usr/sbin", "/usr/bin", "/sbin", "/bin", "/snap/bin"};
+static const unsigned int g_searchDirectoriesCount = ARRAY_SIZE(g_searchDirectories);
+static const char* g_rubyCommand = "cat %s | %s %s";
+static const char* g_gemListCommand = "%s list -i '^%s' | tr -d '\n'";
+
+static char* g_executableRuby = NULL;
+static char* g_executableGem = NULL;
+static bool g_gemChef = false;
 static atomic_int g_referenceCount = 0;
 static unsigned int g_maxPayloadSizeBytes = 0;
 
@@ -46,8 +58,55 @@ static OSCONFIG_LOG_HANDLE UsersGetLog()
     return g_log;
 }
 
+char* FindExecutable(const char* name, void* log)
+{
+    char buffer[128] = {0};
+    char* result = NULL;
+    struct stat st = {0};
 
-bool UsersExecuteChef(const char* resourceClass, const char* resourceName, const char* action, const JSON_Object* propertiesObject, char** result)
+    if ((NULL != name))
+    {
+        for (unsigned int i = 0; i < g_searchDirectoriesCount; i++)
+        {
+            memset(buffer, 0, sizeof(buffer));
+            snprintf(buffer, sizeof(buffer), g_searchCommand, g_searchDirectories[i], name);
+
+            if ((0 == ExecuteCommand(NULL, buffer, false, false, 0, 0, &result, NULL, log)) &&
+                (NULL != result) && (strlen(result) > 0) && (0 == stat(result, &st)))
+            {
+                break;
+            }
+
+            FREE_MEMORY(result);
+        }
+    }
+
+    return result;
+}
+
+bool FindGem(const char* name, void* log)
+{
+    bool found = false;
+    char buffer[64] = {0};
+    char* result = NULL;
+
+    if (NULL != g_executableGem)
+    {
+        snprintf(buffer, sizeof(buffer), g_gemListCommand, g_executableGem, name);
+
+        if ((0 == ExecuteCommand(NULL, buffer, false, false, 0, 0, &result, NULL, log)) &&
+            (0 == strcmp(result, "true")))
+        {
+            found = true;
+        }
+    }
+
+    FREE_MEMORY(result);
+
+    return found;
+}
+
+bool ExecuteChef(const char* resourceClass, const char* resourceName, const char* action, const JSON_Object* propertiesObject, char** result, void* log)
 {
     JSON_Value *rootValue = NULL;
     JSON_Object *rootObject = NULL;
@@ -55,7 +114,10 @@ bool UsersExecuteChef(const char* resourceClass, const char* resourceName, const
     JSON_Value *copiedPropertiesValue = NULL;
 
     int error = 0;
-    const char* command = "cat /tmp/osconfig-chef-exec-tmp.json | ruby /usr/lib/osconfig/chef-exec.rb";
+    char buffer[256] = {0};
+    char* tempFile = "/tmp/osconfig-chef-exec-tmp.json";
+
+    snprintf(buffer, sizeof(buffer), g_rubyCommand, tempFile, g_executableRuby, "/usr/lib/osconfig/chef-exec.rb");
 
     rootValue = json_value_init_object();
     rootObject = json_value_get_object(rootValue);
@@ -75,28 +137,51 @@ bool UsersExecuteChef(const char* resourceClass, const char* resourceName, const
         json_object_set_value(rootObject, "properties", copiedPropertiesValue);
     }
 
-    json_serialize_to_file(rootValue, "/tmp/osconfig-chef-exec-tmp.json");
+    json_serialize_to_file(rootValue, tempFile);
 
     json_value_free(rootValue);
 
-    if (0 != (error = ExecuteCommand(NULL, command, false, false, 0, 0, result, NULL, UsersGetLog())))
+    if (0 != (error = ExecuteCommand(NULL, buffer, false, false, 0, 0, result, NULL, log)))
     {
-        OsConfigLogError(UsersGetLog(), "UsersExecuteChef failed with error (%d)", error);
+        OsConfigLogError(log, "ExecuteChef failed with error (%d)", error);
     }
 
     return (0 == error);
+}
+
+bool IsValidEnvironment(void)
+{
+    return (NULL != g_executableRuby) && (NULL != g_executableGem) && (true == g_gemChef);
 }
 
 void UsersInitialize(const char* configFile)
 {
     g_usersConfigFile = configFile;
     g_log = OpenLog(g_usersLogFile, g_usersRolledLogFile);
-        
-    OsConfigLogInfo(UsersGetLog(), "%s initialized", g_usersModuleName);
+
+    if (NULL == (g_executableRuby = FindExecutable("ruby", UsersGetLog())))
+    {
+        OsConfigLogError(UsersGetLog(), "%s cannot find Ruby executable", g_usersModuleName);
+    }
+    else if (NULL == (g_executableGem = FindExecutable("gem", UsersGetLog())))
+    {
+        OsConfigLogError(UsersGetLog(), "%s cannot find Ruby Gem executable", g_usersModuleName);
+    }
+    else if (false == (g_gemChef = FindGem("chef", UsersGetLog())))
+    {
+        OsConfigLogError(UsersGetLog(), "%s cannot find Chef Infra Ruby Gem", g_usersModuleName);
+    }
+    else 
+    {
+        OsConfigLogInfo(UsersGetLog(), "%s initialized, using Ruby '%s'", g_usersModuleName, g_executableRuby);
+    }
 }
 
 void UsersShutdown(void)
 {
+    FREE_MEMORY(g_executableRuby);
+    FREE_MEMORY(g_executableGem);
+
     OsConfigLogInfo(UsersGetLog(), "%s shutting down", g_usersModuleName);
 
     g_usersConfigFile = NULL;
@@ -169,6 +254,13 @@ int UsersMmiGet(MMI_HANDLE clientSession, const char* componentName, const char*
 
     char* result = NULL;
 
+    if (!IsValidEnvironment())
+    {
+        OsConfigLogError(UsersGetLog(), "%s cannot find dependencies, will not run", g_usersModuleName);
+        status = EPERM;
+        return status;
+    }
+
     if ((NULL == componentName) || (NULL == objectName) || (NULL == payload) || (NULL == payloadSizeBytes))
     {
         OsConfigLogError(UsersGetLog(), "MmiGet(%s, %s, %p, %p) called with invalid arguments", componentName, objectName, payload, payloadSizeBytes);
@@ -191,7 +283,7 @@ int UsersMmiGet(MMI_HANDLE clientSession, const char* componentName, const char*
     }
     else
     {
-        if (true == UsersExecuteChef(g_resourceClass, objectName, "nothing", NULL, &result))
+        if (true == ExecuteChef(g_resourceClass, objectName, "nothing", NULL, &result, UsersGetLog()))
         {
             *payloadSizeBytes = strlen(result);
             *payload = (MMI_JSON_STRING)malloc(*payloadSizeBytes);
@@ -236,6 +328,13 @@ int UsersMmiSet(MMI_HANDLE clientSession, const char* componentName, const char*
     const char* resourceName = NULL;
     int actionSizeBytes = 0;
     char* action = NULL;
+
+    if (!IsValidEnvironment())
+    {
+        OsConfigLogError(UsersGetLog(), "%s cannot find dependencies, will not run", g_usersModuleName);
+        status = EPERM;
+        return status;
+    }
 
     if ((NULL == componentName) || (NULL == objectName) || (NULL == payload) || (payloadSizeBytes <= 0))
     {
@@ -291,7 +390,7 @@ int UsersMmiSet(MMI_HANDLE clientSession, const char* componentName, const char*
 
                     json_object_remove(currentObject, g_jsonPropertyNameAction);
                     
-                    if (false == UsersExecuteChef(g_resourceClass, resourceName, action, currentObject, NULL))
+                    if (false == ExecuteChef(g_resourceClass, resourceName, action, currentObject, NULL, UsersGetLog()))
                     {
                         OsConfigLogError(UsersGetLog(), "MmiSet failed to execute Chef (resource_class = '%s', resource_name = '%s', action = '%s')", g_resourceClass, (NULL != resourceName) ? resourceName : "", (NULL != action) ? action : "");
                         status = EINVAL;
