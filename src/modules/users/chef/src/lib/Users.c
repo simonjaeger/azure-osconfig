@@ -43,7 +43,7 @@ static const char* g_gemListCommand = "%s list -i '^%s' | tr -d '\n'";
 
 static char* g_executableRuby = NULL;
 static char* g_executableGem = NULL;
-static bool g_gemChef = false;
+static bool g_valid = false;
 static atomic_int g_referenceCount = 0;
 static unsigned int g_maxPayloadSizeBytes = 0;
 
@@ -149,11 +149,6 @@ bool ExecuteChef(const char* resourceClass, const char* resourceName, const char
     return (0 == error);
 }
 
-bool IsValidEnvironment(void)
-{
-    return (NULL != g_executableRuby) && (NULL != g_executableGem) && (true == g_gemChef);
-}
-
 void UsersInitialize(const char* configFile)
 {
     g_usersConfigFile = configFile;
@@ -167,12 +162,13 @@ void UsersInitialize(const char* configFile)
     {
         OsConfigLogError(UsersGetLog(), "%s cannot find Ruby Gem executable", g_usersModuleName);
     }
-    else if (false == (g_gemChef = FindGem("chef", UsersGetLog())))
+    else if (false == FindGem("chef", UsersGetLog()))
     {
         OsConfigLogError(UsersGetLog(), "%s cannot find Chef Infra Ruby Gem", g_usersModuleName);
     }
     else 
     {
+        g_valid = true;
         OsConfigLogInfo(UsersGetLog(), "%s initialized, using Ruby '%s'", g_usersModuleName, g_executableRuby);
     }
 }
@@ -254,7 +250,7 @@ int UsersMmiGet(MMI_HANDLE clientSession, const char* componentName, const char*
 
     char* result = NULL;
 
-    if (!IsValidEnvironment())
+    if (false == g_valid)
     {
         OsConfigLogError(UsersGetLog(), "%s cannot find dependencies, will not run", g_usersModuleName);
         status = EPERM;
@@ -329,7 +325,7 @@ int UsersMmiSet(MMI_HANDLE clientSession, const char* componentName, const char*
     int actionSizeBytes = 0;
     char* action = NULL;
 
-    if (!IsValidEnvironment())
+    if (false == g_valid)
     {
         OsConfigLogError(UsersGetLog(), "%s cannot find dependencies, will not run", g_usersModuleName);
         status = EPERM;
