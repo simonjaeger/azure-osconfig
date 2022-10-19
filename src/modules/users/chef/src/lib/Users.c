@@ -28,7 +28,6 @@ static const char* g_usersModuleInfo = "{\"Name\": \"Users\","
 static const char* g_usersModuleName = "Users module";
 static const char* g_usersComponentName = "Users";
 
-// static const char* g_reportedUsersObjectName = "users";
 static const char* g_desiredUsersObjectName = "desiredUsers";
 
 static const char *g_resourceClass= "user";
@@ -47,7 +46,6 @@ static bool g_valid = false;
 static atomic_int g_referenceCount = 0;
 static unsigned int g_maxPayloadSizeBytes = 0;
 
-static const char* g_usersConfigFile = NULL;
 static const char* g_usersLogFile = "/var/log/osconfig_users.log";
 static const char* g_usersRolledLogFile = "/var/log/osconfig_users.bak";
 
@@ -149,9 +147,8 @@ bool ExecuteChef(const char* resourceClass, const char* resourceName, const char
     return (0 == error);
 }
 
-void UsersInitialize(const char* configFile)
+void UsersInitialize()
 {
-    g_usersConfigFile = configFile;
     g_log = OpenLog(g_usersLogFile, g_usersRolledLogFile);
 
     if (NULL == (g_executableRuby = FindExecutable("ruby", UsersGetLog())))
@@ -180,7 +177,6 @@ void UsersShutdown(void)
 
     OsConfigLogInfo(UsersGetLog(), "%s shutting down", g_usersModuleName);
 
-    g_usersConfigFile = NULL;
     CloseLog(&g_log);
 }
 
@@ -281,6 +277,8 @@ int UsersMmiGet(MMI_HANDLE clientSession, const char* componentName, const char*
     {
         if (true == ExecuteChef(g_resourceClass, objectName, "nothing", NULL, &result, UsersGetLog()))
         {
+            // TODO: Mask properties according to resource.
+
             *payloadSizeBytes = strlen(result);
             *payload = (MMI_JSON_STRING)malloc(*payloadSizeBytes);
             if (NULL != *payload)
