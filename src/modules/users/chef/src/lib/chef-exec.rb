@@ -56,4 +56,8 @@ provider = provider_class.new(resource, run_context)
 resource = provider.load_current_resource() 
 
 # Output resource. 
-puts JSON.generate(resource) 
+result = resource.to_hash().except(
+    :before,:params,:provider,:allowed_actions,:action,:updated,
+    :updated_by_last_action,:source_line,:guard_interpreter,
+    :default_guard_interpreter,:elapsed_time)
+puts result.to_json()
