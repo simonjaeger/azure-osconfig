@@ -35,7 +35,7 @@ static const char *g_jsonPropertyNameAction = "action";
 static const char *g_jsonPropertyNameUsername = "username";
 
 static const char* g_searchCommand = "find '%s' -name '%s' -executable -maxdepth 1 | head -n 1 | tr -d '\n'";
-static const char *g_searchDirectories[] = {"/usr/local/sbin", "/usr/local/bin", "/usr/sbin", "/usr/bin", "/sbin", "/bin", "/snap/bin"};
+static const char* g_searchDirectories[] = {"/usr/local/sbin", "/usr/local/bin", "/usr/sbin", "/usr/bin", "/sbin", "/bin", "/snap/bin"};
 static const unsigned int g_searchDirectoriesCount = ARRAY_SIZE(g_searchDirectories);
 static const char* g_rubyCommand = "cat %s | %s %s";
 static const char* g_gemListCommand = "%s list -i '^%s' | tr -d '\n'";
