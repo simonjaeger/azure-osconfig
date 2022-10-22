@@ -31,11 +31,12 @@ static const char* g_usersComponentName = "Users";
 static const char* g_desiredUsersObjectName = "desiredUsers";
 
 static const char *g_moduleName= "user";
+static const char* g_jsonPropertyNameName = "name";
 
 static const char* g_searchCommand = "find '%s' -name '%s' -executable -maxdepth 1 | head -n 1 | tr -d '\n'";
 static const char *g_searchDirectories[] = {"/usr/local/sbin", "/usr/local/bin", "/usr/sbin", "/usr/bin", "/sbin", "/bin", "/snap/bin"};
 static const unsigned int g_searchDirectoriesCount = ARRAY_SIZE(g_searchDirectories);
-static const char* g_PythonCommand = "%s %s %s %s | tr -d '\n'";
+static const char* g_pythonCommand = "%s %s %s %s";
 static const char* g_pipShowCommand = "%s show '%s' &> /dev/null ; echo $? | tr -d '\n'";
 
 static char* g_executablePython = NULL;
@@ -102,33 +103,35 @@ bool FindPackage(const char* name, void* log)
     return found;
 }
 
-bool ExecuteAnsible(const char* moduleName, const JSON_Object* propertiesObject, char** result, void* log)
+bool ExecuteAnsible(const char* moduleName, const JSON_Object* argumentsObject, char** result, void* log)
 {
     JSON_Value *rootValue = NULL;
     JSON_Object *rootObject = NULL;
-    JSON_Value *propertiesValue = NULL;
-    JSON_Value *copiedPropertiesValue = NULL;
+    JSON_Value *argumentsValue = NULL;
+    JSON_Value *copiedArgumentsValue = NULL;
 
     int error = 0;
     char buffer[256] = {0};
     char* tempFile = "/tmp/osconfig-ansible-exec-tmp.json";
 
-    snprintf(buffer, sizeof(buffer), g_PythonCommand, g_executablePython, "/usr/lib/osconfig/ansible-exec.py", moduleName, tempFile);
+    // TODO: Generate unique file name.
+
+    snprintf(buffer, sizeof(buffer), g_pythonCommand, g_executablePython, "/usr/lib/osconfig/ansible-exec.py", moduleName, tempFile);
 
     rootValue = json_value_init_object();
     rootObject = json_value_get_object(rootValue);
 
-    if (NULL != propertiesObject)
+    if (NULL != argumentsObject)
     {
-        propertiesValue = json_object_get_wrapping_value(propertiesObject);
-        copiedPropertiesValue = json_value_deep_copy(propertiesValue);
+        argumentsValue = json_object_get_wrapping_value(argumentsObject);
+        copiedArgumentsValue = json_value_deep_copy(argumentsValue);
     }
     else 
     {
-        copiedPropertiesValue = json_value_init_object();
+        copiedArgumentsValue = json_value_init_object();
     }
 
-    json_object_set_value(rootObject, "ANSIBLE_MODULE_ARGS", copiedPropertiesValue);
+    json_object_set_value(rootObject, "ANSIBLE_MODULE_ARGS", copiedArgumentsValue);
 
     json_serialize_to_file(rootValue, tempFile);
 
@@ -240,6 +243,8 @@ int UsersMmiGet(MMI_HANDLE clientSession, const char* componentName, const char*
     int status = MMI_OK;
 
     char* result = NULL;
+    JSON_Value* rootValue = NULL;
+    JSON_Object* rootObject = NULL;
 
     if (false == g_valid)
     {
@@ -270,9 +275,11 @@ int UsersMmiGet(MMI_HANDLE clientSession, const char* componentName, const char*
     }
     else
     {
-        // TODO: Map name to properties.
+        rootValue = json_value_init_object();
+        rootObject = json_value_get_object(rootValue);
+        json_object_set_string(rootObject, g_jsonPropertyNameName, objectName);
 
-        if (true == ExecuteAnsible(g_moduleName, NULL, &result, UsersGetLog()))
+        if (true == ExecuteAnsible(g_moduleName, rootObject, &result, UsersGetLog()))
         {
             // TODO: Mask properties according to interface.
 
@@ -300,6 +307,11 @@ int UsersMmiGet(MMI_HANDLE clientSession, const char* componentName, const char*
     if (IsFullLoggingEnabled())
     {
         OsConfigLogInfo(UsersGetLog(), "MmiGet(%p, %s, %s, %.*s, %d) returning %d", clientSession, componentName, objectName, *payloadSizeBytes, *payload, *payloadSizeBytes, status);
+    }
+
+    if (NULL != rootValue)
+    {
+        json_value_free(rootValue);
     }
 
     FREE_MEMORY(result);

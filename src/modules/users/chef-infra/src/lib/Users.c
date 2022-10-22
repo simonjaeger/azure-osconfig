@@ -30,9 +30,9 @@ static const char* g_usersComponentName = "Users";
 
 static const char* g_desiredUsersObjectName = "desiredUsers";
 
-static const char *g_resourceClass= "user";
-static const char *g_jsonPropertyNameAction = "action";
-static const char *g_jsonPropertyNameUsername = "username";
+static const char* g_resourceClass= "user";
+static const char* g_jsonPropertyNameAction = "action";
+static const char* g_jsonPropertyNameUsername = "username";
 
 static const char* g_searchCommand = "find '%s' -name '%s' -executable -maxdepth 1 | head -n 1 | tr -d '\n'";
 static const char* g_searchDirectories[] = {"/usr/local/sbin", "/usr/local/bin", "/usr/sbin", "/usr/bin", "/sbin", "/bin", "/snap/bin"};
@@ -85,7 +85,7 @@ char* FindExecutable(const char* name, void* log)
 bool FindGem(const char* name, void* log)
 {
     bool found = false;
-    char buffer[64] = {0};
+    char buffer[128] = {0};
     char* result = NULL;
 
     if (NULL != g_executableGem)
@@ -114,6 +114,8 @@ bool ExecuteChef(const char* resourceClass, const char* resourceName, const char
     int error = 0;
     char buffer[256] = {0};
     char* tempFile = "/tmp/osconfig-chef-exec-tmp.json";
+
+    // TODO: Generate unique file name.
 
     snprintf(buffer, sizeof(buffer), g_rubyCommand, tempFile, g_executableRuby, "/usr/lib/osconfig/chef-exec.rb");
 
