@@ -56,8 +56,11 @@ provider = provider_class.new(resource, run_context)
 resource = provider.load_current_resource() 
 
 # Output resource. 
-result = resource.to_hash().except(
-    :before,:params,:provider,:allowed_actions,:action,:updated,
+except = [:before,:params,:provider,:allowed_actions,:action,:updated,
     :updated_by_last_action,:source_line,:guard_interpreter,
-    :default_guard_interpreter,:elapsed_time)
+    :default_guard_interpreter,:elapsed_time]
+result = resource.to_hash()
+except.each do |key|
+    result.delete(key)
+end
 puts result.to_json()
