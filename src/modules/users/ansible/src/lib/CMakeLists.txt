@@ -12,4 +12,4 @@ target_include_directories(userslib
         ${MODULES_INC_DIR}
         ${CMAKE_CURRENT_SOURCE_DIR})
 
-configure_file(ansible-exec.py /usr/lib/osconfig/ COPYONLY)
+configure_file(ansible-exec.py /usr/lib/osconfig/ansible-exec.p COPYONLY)
