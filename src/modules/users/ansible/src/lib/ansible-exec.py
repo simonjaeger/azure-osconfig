@@ -1,7 +1,10 @@
 # Copyright (c) Microsoft Corporation. All rights reserved.
 # Licensed under the MIT License.
 
-import sys, subprocess, json, importlib
+import importlib
+import json
+import subprocess
+import sys
 
 if len(sys.argv) == 3:
     MODULE_NAME = sys.argv[1]

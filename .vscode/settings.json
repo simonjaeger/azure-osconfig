@@ -8,5 +8,8 @@
         "hsm_type_symm_key": "ON"
     },
     // Enables C# XML Auto Commenting
-    "editor.formatOnType": true
+    "editor.formatOnType": true,
+    "files.associations": {
+        "typeinfo": "c"
+    }
 }
