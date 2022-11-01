@@ -27,3 +27,6 @@ if len(sys.argv) == 3:
         print(stderr or '', end='')
 
     sys.exit(returncode)
+else:
+    raise 'missing args'
+    

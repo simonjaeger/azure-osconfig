@@ -12,4 +12,4 @@ target_include_directories(userslib
         ${MODULES_INC_DIR}
         ${CMAKE_CURRENT_SOURCE_DIR})
 
-configure_file(ansible-exec.py /usr/lib/osconfig/ansible-exec.py COPYONLY)
+configure_file(cloud-init-exec.py /usr/lib/osconfig/cloud-init-exec.py COPYONLY)

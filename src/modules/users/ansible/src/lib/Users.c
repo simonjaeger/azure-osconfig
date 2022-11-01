@@ -30,7 +30,7 @@ static const char* g_usersComponentName = "Users";
 
 static const char* g_desiredUsersObjectName = "desiredUsers";
 
-static const char *g_moduleName= "user";
+static const char *g_moduleName = "user";
 static const char* g_jsonPropertyNameName = "name";
 
 static const char* g_searchCommand = "find '%s' -name '%s' -executable -maxdepth 1 | head -n 1 | tr -d '\n'";
