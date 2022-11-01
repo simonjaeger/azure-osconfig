@@ -244,7 +244,7 @@ int UsersMmiGetInfo(const char* clientName, MMI_JSON_STRING* payload, int* paylo
 
 int UsersMmiGet(MMI_HANDLE clientSession, const char* componentName, const char* objectName, MMI_JSON_STRING* payload, int* payloadSizeBytes)
 {
-    OsConfigLogInfo(UsersGetLog(), "No desired objects, MmiGet not implemented");
+    OsConfigLogInfo(UsersGetLog(), "No reported objects, MmiGet not implemented");
     
     UNUSED(clientSession);
     UNUSED(componentName);
