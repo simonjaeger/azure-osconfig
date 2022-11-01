@@ -1,0 +1,41 @@
+{
+  "name": "UsersModel",
+  "type": "mimModel",
+  "contents": [
+    {
+      "name": "Users",
+      "type": "mimComponent",
+      "contents": [
+        {
+          "name": "desiredUsers",
+          "type": "mimObject",
+          "desired": true,
+          "schema": {
+            "type": "array",
+            "elementSchema": {
+              "type": "object",
+              "fields": [
+                {
+                  "name": "name",
+                  "schema": "string"
+                },
+                {
+                  "name": "gecos",
+                  "schema": "string"
+                },
+                {
+                  "name": "homedir",
+                  "schema": "string"
+                },
+                {
+                  "name": "shell",
+                  "schema": "string"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
