@@ -30,23 +30,23 @@ static const char* g_usersComponentName = "Users";
 
 static const char* g_desiredUsersObjectName = "desiredUsers";
 
-static const char *g_moduleName = "user";
+static const char* g_resourceType = "user";
 static const char* g_jsonPropertyNameName = "name";
 
 static const char* g_searchCommand = "find '%s' -name '%s' -executable -maxdepth 1 | head -n 1 | tr -d '\n'";
-static const char *g_searchDirectories[] = {"/usr/local/sbin", "/usr/local/bin", "/usr/sbin", "/usr/bin", "/sbin", "/bin", "/snap/bin"};
+static const char* g_searchDirectories[] = {"/usr/local/sbin", "/usr/local/bin", "/usr/sbin", "/usr/bin", "/sbin", "/bin", "/snap/bin"};
 static const unsigned int g_searchDirectoriesCount = ARRAY_SIZE(g_searchDirectories);
-static const char* g_pythonCommand = "%s %s %s %s";
-static const char* g_pipShowCommand = "%s show '%s' &> /dev/null ; echo $? | tr -d '\n'";
+static const char* g_rubyCommand = "cat %s | %s %s";
+static const char* g_gemListCommand = "%s list -i '^%s' | tr -d '\n'";
 
-static char* g_executablePython = NULL;
-static char* g_executablePip = NULL;
+static char* g_executableRuby = NULL;
+static char* g_executableGem = NULL;
 static bool g_valid = false;
 static atomic_int g_referenceCount = 0;
 static unsigned int g_maxPayloadSizeBytes = 0;
 
-static const char* g_usersLogFile = "/var/log/osconfig_users_ansible.log";
-static const char* g_usersRolledLogFile = "/var/log/osconfig_users_ansible.bak";
+static const char* g_usersLogFile = "/var/log/osconfig_users_puppet.log";
+static const char* g_usersRolledLogFile = "/var/log/osconfig_users_puppet.bak";
 
 static OSCONFIG_LOG_HANDLE g_log = NULL;
 
@@ -81,18 +81,18 @@ char* FindExecutable(const char* name, void* log)
     return result;
 }
 
-bool FindPackage(const char* name, void* log)
+bool FindGem(const char* name, void* log)
 {
     bool found = false;
     char buffer[128] = {0};
     char* result = NULL;
 
-    if (NULL != g_executablePip)
+    if (NULL != g_executableGem)
     {
-        snprintf(buffer, sizeof(buffer), g_pipShowCommand, g_executablePip, name);
+        snprintf(buffer, sizeof(buffer), g_gemListCommand, g_executableGem, name);
 
         if ((0 == ExecuteCommand(NULL, buffer, false, false, 0, 0, &result, NULL, log)) &&
-            (0 == strcmp(result, "0")))
+            (0 == strcmp(result, "true")))
         {
             found = true;
         }
@@ -103,35 +103,33 @@ bool FindPackage(const char* name, void* log)
     return found;
 }
 
-bool ExecuteAnsible(const char* moduleName, const JSON_Object* argumentsObject, char** result, void* log)
+bool ExecutePuppet(const char* type, const JSON_Object* attributesObject, char** result, void* log)
 {
     JSON_Value *rootValue = NULL;
     JSON_Object *rootObject = NULL;
-    JSON_Value *argumentsValue = NULL;
-    JSON_Value *copiedArgumentsValue = NULL;
+    JSON_Value *attributesValue = NULL;
+    JSON_Value *copiedAttributesValue = NULL;
 
     int error = 0;
     char buffer[256] = {0};
-    char* tempFile = "/tmp/osconfig-ansible-exec-tmp.json";
+    char* tempFile = "/tmp/osconfig-puppet-exec-tmp.json";
 
     // TODO: Generate unique file name.
 
-    snprintf(buffer, sizeof(buffer), g_pythonCommand, g_executablePython, "/usr/lib/osconfig/ansible-exec.py", moduleName, tempFile);
+    snprintf(buffer, sizeof(buffer), g_rubyCommand, tempFile, g_executableRuby, "/usr/lib/osconfig/puppet-exec.rb");
 
     rootValue = json_value_init_object();
     rootObject = json_value_get_object(rootValue);
 
-    if (NULL != argumentsObject)
-    {
-        argumentsValue = json_object_get_wrapping_value(argumentsObject);
-        copiedArgumentsValue = json_value_deep_copy(argumentsValue);
-    }
-    else 
-    {
-        copiedArgumentsValue = json_value_init_object();
-    }
+    json_object_set_string(rootObject, "type", type);
 
-    json_object_set_value(rootObject, "ANSIBLE_MODULE_ARGS", copiedArgumentsValue);
+
+    if (NULL != attributesObject)
+    {
+        attributesValue = json_object_get_wrapping_value(attributesObject);
+        copiedAttributesValue = json_value_deep_copy(attributesValue);
+        json_object_set_value(rootObject, "attributes", copiedAttributesValue);
+    }
 
     json_serialize_to_file(rootValue, tempFile);
 
@@ -139,7 +137,7 @@ bool ExecuteAnsible(const char* moduleName, const JSON_Object* argumentsObject, 
 
     if (0 != (error = ExecuteCommand(NULL, buffer, false, false, 0, 0, result, NULL, log)))
     {
-        OsConfigLogError(log, "ExecuteAnsible failed with error (%d)", error);
+        OsConfigLogError(log, "ExecutePuppet failed with error (%d)", error);
     }
 
     return (0 == error);
@@ -149,29 +147,29 @@ void UsersInitialize()
 {
     g_log = OpenLog(g_usersLogFile, g_usersRolledLogFile);
 
-    if (NULL == (g_executablePython = FindExecutable("python3", UsersGetLog())))
+    if (NULL == (g_executableRuby = FindExecutable("ruby", UsersGetLog())))
     {
-        OsConfigLogError(UsersGetLog(), "%s cannot find 'python3' executable", g_usersModuleName);
+        OsConfigLogError(UsersGetLog(), "%s cannot find executable 'ruby'", g_usersModuleName);
     }
-    else if (NULL == (g_executablePip = FindExecutable("pip3", UsersGetLog())))
+    else if (NULL == (g_executableGem = FindExecutable("gem", UsersGetLog())))
     {
-        OsConfigLogError(UsersGetLog(), "%s cannot find 'pip' executable", g_usersModuleName);
+        OsConfigLogError(UsersGetLog(), "%s cannot find executable 'gem'", g_usersModuleName);
     }
-    else if (false == FindPackage("ansible-core", UsersGetLog()))
+    else if (false == FindGem("puppet", UsersGetLog()))
     {
-        OsConfigLogError(UsersGetLog(), "%s cannot find 'ansible-core' package", g_usersModuleName);
+        OsConfigLogError(UsersGetLog(), "%s cannot find Ruby Gem 'puppet'", g_usersModuleName);
     }
     else 
     {
         g_valid = true;
-        OsConfigLogInfo(UsersGetLog(), "%s initialized, using 'python3' '%s'", g_usersModuleName, g_executablePython);
+        OsConfigLogInfo(UsersGetLog(), "%s initialized, using Ruby '%s'", g_usersModuleName, g_executableRuby);
     }
 }
 
 void UsersShutdown(void)
 {
-    FREE_MEMORY(g_executablePython);
-    FREE_MEMORY(g_executablePip);
+    FREE_MEMORY(g_executableRuby);
+    FREE_MEMORY(g_executableGem);
 
     OsConfigLogInfo(UsersGetLog(), "%s shutting down", g_usersModuleName);
 
@@ -243,8 +241,8 @@ int UsersMmiGet(MMI_HANDLE clientSession, const char* componentName, const char*
     int status = MMI_OK;
 
     char* result = NULL;
-    JSON_Value* rootValue = NULL;
-    JSON_Object* rootObject = NULL;
+    JSON_Value* attributesValue = NULL;
+    JSON_Object* attributesObject = NULL;
 
     if (false == g_valid)
     {
@@ -275,13 +273,13 @@ int UsersMmiGet(MMI_HANDLE clientSession, const char* componentName, const char*
     }
     else
     {
-        rootValue = json_value_init_object();
-        rootObject = json_value_get_object(rootValue);
-        json_object_set_string(rootObject, g_jsonPropertyNameName, objectName);
+        attributesValue = json_value_init_object();
+        attributesObject = json_value_get_object(attributesValue);
+        json_object_set_string(attributesObject, g_jsonPropertyNameName, objectName);
 
-        if (true == ExecuteAnsible(g_moduleName, rootObject, &result, UsersGetLog()))
+        if (true == ExecutePuppet(g_resourceType, attributesObject, &result, UsersGetLog()))
         {
-            // TODO: Mask properties according to interface.
+            // TODO: Mask properties according to resource.
 
             *payloadSizeBytes = strlen(result);
             *payload = (MMI_JSON_STRING)malloc(*payloadSizeBytes);
@@ -299,7 +297,7 @@ int UsersMmiGet(MMI_HANDLE clientSession, const char* componentName, const char*
         }
         else 
         {
-            OsConfigLogError(UsersGetLog(), "MmiGet failed to execute Ansible (module = '%s')", g_moduleName);
+            OsConfigLogError(UsersGetLog(), "MmiGet failed to execute Puppet (type = '%s')", g_resourceType);
             status = EINVAL;
         }
     }
@@ -309,9 +307,9 @@ int UsersMmiGet(MMI_HANDLE clientSession, const char* componentName, const char*
         OsConfigLogInfo(UsersGetLog(), "MmiGet(%p, %s, %s, %.*s, %d) returning %d", clientSession, componentName, objectName, *payloadSizeBytes, *payload, *payloadSizeBytes, status);
     }
 
-    if (NULL != rootValue)
+    if (NULL != attributesValue)
     {
-        json_value_free(rootValue);
+        json_value_free(attributesValue);
     }
 
     FREE_MEMORY(result);
@@ -370,10 +368,10 @@ int UsersMmiSet(MMI_HANDLE clientSession, const char* componentName, const char*
                 for (unsigned int i = 0; i < json_array_get_count(rootArray); i++)
                 {
                     currentObject = json_array_get_object(rootArray, i);
-                    
-                    if (false == ExecuteAnsible(g_moduleName, currentObject, NULL, UsersGetLog()))
+
+                    if (false == ExecutePuppet(g_resourceType, currentObject, NULL, UsersGetLog()))
                     {
-                        OsConfigLogError(UsersGetLog(), "MmiSet failed to execute Ansible (module = '%s')", g_moduleName);
+                        OsConfigLogError(UsersGetLog(), "MmiSet failed to execute Puppet (type = '%s')", g_resourceType);
                         status = EINVAL;
                     }
                 }

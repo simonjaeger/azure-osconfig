@@ -46,8 +46,8 @@ static bool g_valid = false;
 static atomic_int g_referenceCount = 0;
 static unsigned int g_maxPayloadSizeBytes = 0;
 
-static const char* g_usersLogFile = "/var/log/osconfig_users.log";
-static const char* g_usersRolledLogFile = "/var/log/osconfig_users.bak";
+static const char* g_usersLogFile = "/var/log/osconfig_users_chefinfra.log";
+static const char* g_usersRolledLogFile = "/var/log/osconfig_users_chefinfra.bak";
 
 static OSCONFIG_LOG_HANDLE g_log = NULL;
 
@@ -155,15 +155,15 @@ void UsersInitialize()
 
     if (NULL == (g_executableRuby = FindExecutable("ruby", UsersGetLog())))
     {
-        OsConfigLogError(UsersGetLog(), "%s cannot find Ruby executable", g_usersModuleName);
+        OsConfigLogError(UsersGetLog(), "%s cannot find executable 'ruby'", g_usersModuleName);
     }
     else if (NULL == (g_executableGem = FindExecutable("gem", UsersGetLog())))
     {
-        OsConfigLogError(UsersGetLog(), "%s cannot find Ruby Gem executable", g_usersModuleName);
+        OsConfigLogError(UsersGetLog(), "%s cannot find executable 'gem'", g_usersModuleName);
     }
     else if (false == FindGem("chef", UsersGetLog()))
     {
-        OsConfigLogError(UsersGetLog(), "%s cannot find Chef Infra Ruby Gem", g_usersModuleName);
+        OsConfigLogError(UsersGetLog(), "%s cannot find Ruby Gem 'chef'", g_usersModuleName);
     }
     else 
     {

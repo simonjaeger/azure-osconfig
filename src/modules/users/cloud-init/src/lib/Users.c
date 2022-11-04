@@ -45,8 +45,8 @@ static bool g_valid = false;
 static atomic_int g_referenceCount = 0;
 static unsigned int g_maxPayloadSizeBytes = 0;
 
-static const char* g_usersLogFile = "/var/log/osconfig_users.log";
-static const char* g_usersRolledLogFile = "/var/log/osconfig_users.bak";
+static const char* g_usersLogFile = "/var/log/osconfig_users_cloudinit.log";
+static const char* g_usersRolledLogFile = "/var/log/osconfig_users_cloudinit.bak";
 
 static OSCONFIG_LOG_HANDLE g_log = NULL;
 
