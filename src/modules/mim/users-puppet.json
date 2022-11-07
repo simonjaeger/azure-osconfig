@@ -1,0 +1,96 @@
+{
+  "name": "UsersModel",
+  "type": "mimModel",
+  "contents": [
+    {
+      "name": "Users",
+      "type": "mimComponent",
+      "contents": [
+        {
+          "name": "desiredUsers",
+          "type": "mimObject",
+          "desired": true,
+          "schema": {
+            "type": "array",
+            "elementSchema": {
+              "type": "object",
+              "fields": [
+                {
+                  "name": "name",
+                  "schema": "string"
+                },
+                {
+                  "name": "comment",
+                  "schema": "string"
+                },
+                {
+                  "name": "home",
+                  "schema": "string"
+                },
+                {
+                  "name": "shell",
+                  "schema": "string"
+                },
+                {
+                  "name": "uid",
+                  "schema": "integer"
+                },
+                {
+                  "name": "ensure",
+                  "schema": {
+                    "type": "enum",
+                    "valueSchema": "string",
+                    "enumValues": [
+                      {
+                        "name": "present",
+                        "enumValue": "present"
+                      },
+                      {
+                        "name": "absent",
+                        "enumValue": "absent"
+                      },
+                      {
+                        "name": "role",
+                        "enumValue": "role"
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "janedoe",
+          "type": "mimObject",
+          "desired": false,
+          "schema": {
+            "type": "object",
+            "fields": [
+              {
+                "name": "name",
+                "schema": "string"
+              },
+              {
+                "name": "comment",
+                "schema": "string"
+              },
+              {
+                "name": "home",
+                "schema": "string"
+              },
+              {
+                "name": "shell",
+                "schema": "string"
+              },
+              {
+                "name": "uid",
+                "schema": "integer"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
