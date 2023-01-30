@@ -46,6 +46,7 @@ function(add_module directory)
 endfunction()
 
 add_module(adhs)
+add_module(asb)
 add_module(commandrunner)
 add_module(configuration)
 add_module(deliveryoptimization)
