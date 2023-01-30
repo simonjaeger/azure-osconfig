@@ -8,8 +8,52 @@
 #include <Logging.h>
 #include <Mmi.h>
 #include <regex.h>
+#include <parson.h>
 
 #include "Asb.h"
+
+typedef struct ASB_AUDIT_CHECK
+{
+    char* distro;
+    char* command;
+    // TODO: ...
+} ASB_AUDIT_CHECK;
+
+typedef struct ASB_AUDIT
+{
+    char* msid;
+    char* description;
+    size_t checksCount;
+    ASB_AUDIT_CHECK* checks;
+} ASB_AUDIT;
+
+typedef struct ASB_REMEDIATION_ACTION
+{
+    char* distro;
+    char* action;
+    // TODO: ...
+} ASB_REMEDIATION_ACTION;
+
+typedef struct ASB_REMEDIATION
+{
+    char* id;
+    size_t msidsCount;
+    char** msids;
+    char* description;
+    size_t actionsCount;
+    ASB_REMEDIATION_ACTION* actions;
+} ASB_REMEDIATION;
+
+typedef struct ASB_BASELINE
+{
+    char* baselineId;
+    char* baseOrigId;
+    // TODO: ...
+    size_t auditsCount;
+    ASB_AUDIT* audits;
+    size_t remediationsCount;
+    ASB_REMEDIATION* remediations;
+} ASB_BASELINE;
 
 static const char* g_asbModuleInfo = "{\"Name\": \"Asb\","
     "\"Description\": \"Provides functionality to observe and configure Azure Security Baselines\","
@@ -34,6 +78,10 @@ static const char* g_reportedComplianceObjectName = "compliance";
 // static const char* g_permissionConfigMapValues[] = {"0", "1", "2"};
 // static const unsigned int g_permissionConfigMapCount = ARRAY_SIZE(g_permissionConfigMapKeys);
 
+static const char* g_baselineFiles[] = {"/etc/osconfig/asb/asc_audits.json", "/etc/osconfig/asb/cis_audits.json", "/etc/osconfig/asb/common_audits.json", "/etc/osconfig/asb/ssh_audits.json"};
+static const unsigned int g_baselinesCount = ARRAY_SIZE(g_baselineFiles);
+static ASB_BASELINE* g_baselines[8] = {0}; // TODO: ...
+
 static atomic_int g_referenceCount = 0;
 static unsigned int g_maxPayloadSizeBytes = 0;
 
@@ -47,16 +95,242 @@ static OSCONFIG_LOG_HANDLE AsbGetLog()
     return g_log;
 }
 
+ASB_BASELINE* AsbLoadBaseline(const char* file)
+{
+    ASB_BASELINE* baseline = NULL;
+
+    JSON_Value* rootValue = NULL;
+    JSON_Object* rootObject = NULL;
+
+    JSON_Array* auditsArray = NULL;
+    JSON_Value* auditValue = NULL;
+    JSON_Object* auditObject = NULL;
+
+    JSON_Array* checksArray = NULL;;
+    JSON_Value* checkValue = NULL;
+    JSON_Object* checkObject = NULL;
+
+    JSON_Array* remediationsArray = NULL;
+
+    size_t i = 0;
+    size_t j = 0;
+
+    if (NULL != (rootValue = json_parse_file(file)) && (json_value_get_type(rootValue) == JSONObject))
+    {
+        baseline = (ASB_BASELINE*)malloc(sizeof(ASB_BASELINE));
+
+        if (NULL != baseline)
+        {
+            baseline->baselineId = NULL;
+            baseline->baseOrigId = NULL;
+            baseline->auditsCount = 0;
+            baseline->audits = NULL;
+            baseline->remediationsCount = 0;
+            baseline->remediations = NULL;
+
+            rootObject = json_value_get_object(rootValue);
+            
+            if (json_object_has_value_of_type(rootObject, "@BaselineId", JSONString))
+            {
+                baseline->baselineId = DuplicateString(json_object_get_string(rootObject, "@BaselineId"));
+            }
+
+            if (json_object_has_value_of_type(rootObject, "@BaseOrigId", JSONString))
+            {
+                baseline->baseOrigId = DuplicateString(json_object_get_string(rootObject, "@BaseOrigId"));
+            }
+
+            if (json_object_has_value_of_type(rootObject, "audits", JSONArray))
+            {
+                auditsArray = json_object_get_array(rootObject, "audits");
+                baseline->auditsCount = json_array_get_count(auditsArray);
+                baseline->audits = (ASB_AUDIT*)malloc(sizeof(ASB_AUDIT) * baseline->auditsCount);
+
+                if (NULL != baseline->audits)
+                {
+                    for (i = 0; i < baseline->auditsCount; i++)
+                    {
+                        baseline->audits[i].msid = NULL;
+                        baseline->audits[i].description = NULL;
+                        baseline->audits[i].checksCount = 0;
+                        baseline->audits[i].checks = NULL;
+
+                        auditValue = json_array_get_value(auditsArray, i);
+                
+                        if (json_value_get_type(auditValue) == JSONObject)
+                        {
+                            auditObject = json_value_get_object(auditValue);
+
+                            if (json_object_has_value_of_type(auditObject, "@msid", JSONString))
+                            {
+                                baseline->audits[i].msid = DuplicateString(json_object_get_string(auditObject, "@msid"));
+                            }
+
+                            if (json_object_has_value_of_type(auditObject, "@description", JSONString))
+                            {
+                                baseline->audits[i].description = DuplicateString(json_object_get_string(auditObject, "@description"));
+                            }
+
+                            if (json_object_has_value_of_type(auditObject, "check", JSONArray))
+                            {
+                                checksArray = json_object_get_array(auditObject, "check");
+                                baseline->audits[i].checksCount = json_array_get_count(checksArray);
+                                baseline->audits[i].checks = (ASB_AUDIT_CHECK*)malloc(sizeof(ASB_AUDIT_CHECK) * baseline->audits[i].checksCount);
+
+                                if (NULL != baseline->audits[i].checks)
+                                {
+                                    for (j = 0; j < baseline->audits[i].checksCount; j++)
+                                    {
+                                        baseline->audits[i].checks[j].distro = NULL;
+                                        baseline->audits[i].checks[j].command = NULL;
+
+                                        checkValue = json_array_get_value(checksArray, j);
+                                
+                                        if (json_value_get_type(checkValue) == JSONObject)
+                                        {
+                                            checkObject = json_value_get_object(checkValue);
+
+                                            if (json_object_has_value_of_type(checkObject, "@distro", JSONString))
+                                            {
+                                                baseline->audits[i].checks[j].distro = DuplicateString(json_object_get_string(checkObject, "@distro"));
+                                            }
+
+                                            if (json_object_has_value_of_type(checkObject, "@command", JSONString))
+                                            {
+                                                baseline->audits[i].checks[j].command = DuplicateString(json_object_get_string(checkObject, "@command"));
+                                            }
+                                        }
+                                        else 
+                                        {
+                                            // LOG: ...
+                                        }
+                                    }
+                                }
+                                else 
+                                {
+                                    // LOG: ...
+                                }
+                            }
+                        }
+                        else 
+                        {
+                            // LOG: ...
+                        }
+                    }
+                }
+                else 
+                {
+                    // LOG: ...
+                }
+            }
+
+            if (json_object_has_value_of_type(rootObject, "remediations", JSONArray))
+            {
+                remediationsArray = json_object_get_array(rootObject, "remediations");
+                baseline->remediationsCount = json_array_get_count(remediationsArray);
+
+                // TODO: ...
+            }
+        }
+        else 
+        {
+            // LOG: ...
+        }
+    }
+    else 
+    {
+        // LOG: ...
+    }
+
+    if (NULL != rootValue)
+    {
+        json_value_free(rootValue);
+    }
+
+    return baseline;
+}
+
+void AsbFreeBaseline(ASB_BASELINE* baseline)
+{
+    size_t i = 0;
+    size_t j = 0;
+
+    if (NULL != baseline)
+    {
+        for (i = 0; i < baseline->auditsCount; i++)
+        {
+            for (j = 0; j < baseline->audits[i].checksCount; j++)
+            {
+                FREE_MEMORY(baseline->audits[i].checks[j].distro);
+                FREE_MEMORY(baseline->audits[i].checks[j].command);
+            }
+
+            FREE_MEMORY(baseline->audits[i].msid);
+            FREE_MEMORY(baseline->audits[i].description);
+            FREE_MEMORY(baseline->audits[i].checks);
+        }
+
+        for (i = 0; i < baseline->remediationsCount; i++)
+        {
+            // TODO: F...
+        }
+
+        FREE_MEMORY(baseline->baselineId);
+        FREE_MEMORY(baseline->baseOrigId);
+        FREE_MEMORY(baseline->audits);
+        FREE_MEMORY(baseline->remediations);
+    }
+
+    FREE_MEMORY(baseline);
+}
+
 void AsbInitialize()
 {
+    size_t i = 0;
+
     g_log = OpenLog(g_asbLogFile, g_asbRolledLogFile);
-        
+
+    for (i = 0; i < g_baselinesCount; i++)
+    {
+        g_baselines[i] = AsbLoadBaseline(g_baselineFiles[i]);
+
+        if (NULL != g_baselines[i])
+        {
+            OsConfigLogInfo(AsbGetLog(), "AsbInitialize() loaded baseline '%s' (%ld objects) from file '%s'", g_baselines[i]->baselineId, g_baselines[i]->auditsCount + g_baselines[i]->remediationsCount, g_baselineFiles[i]);
+        }
+        else 
+        {
+            OsConfigLogInfo(AsbGetLog(), "AsbInitialize() failed to load baseline from file '%s'", g_baselineFiles[i]);
+        }
+    }
+
+    // ASB_BASELINE* baseline = AsbLoadBaseline("/etc/osconfig/asb/common_audits.json");
+
+    // OsConfigLogInfo(AsbGetLog(), "Baseline: %s %s %ld %ld", baseline->baselineId, baseline->baseOrigId, baseline->auditsCount, baseline->remediationsCount);
+
+    // for (size_t i = 0; i < baseline->auditsCount; i++)
+    // {
+    //     OsConfigLogInfo(AsbGetLog(), "Audit: %s %ld", baseline->audits[i].msid, baseline->audits[i].checksCount);
+
+    //     for (size_t j = 0; j < baseline->audits[i].checksCount; j++)
+    //     {
+    //         OsConfigLogInfo(AsbGetLog(), "Check: %s %s", baseline->audits[i].checks[j].distro, baseline->audits[i].checks[j].command);
+    //     }
+    // }
+
     OsConfigLogInfo(AsbGetLog(), "%s initialized", g_asbModuleName);
 }
 
 void AsbShutdown(void)
 {
+    size_t i = 0;
+
     OsConfigLogInfo(AsbGetLog(), "%s shutting down", g_asbModuleName);
+
+    for (i = 0; i < g_baselinesCount; i++)
+    {
+        AsbFreeBaseline(g_baselines[i]);
+    }
 
     CloseLog(&g_log);
 }
@@ -129,16 +403,9 @@ int AsbMmiGet(MMI_HANDLE clientSession, const char* componentName, const char* o
     UNUSED(payload);
     UNUSED(payloadSizeBytes);
 
-
-
     int status = MMI_OK;
-    // const char* value = NULL;
-    // char* fileContent = NULL;
-    // unsigned int fileContentSizeBytes = 0;
-    // regmatch_t matchGroups[3] = {0};
-    // regex_t permissionRegex = {0};
-    // char* currentMatch = NULL;
-    // unsigned int currentMatchSizeBytes = 0;
+    size_t i = 0;
+    size_t j = 0;
 
     if ((NULL == componentName) || (NULL == objectName) || (NULL == payload) || (NULL == payloadSizeBytes))
     {
@@ -167,99 +434,30 @@ int AsbMmiGet(MMI_HANDLE clientSession, const char* componentName, const char* o
     }
     else
     {
+        ASB_BASELINE* baseline = g_baselines[2];
 
+        if (NULL != baseline)
+        {
+            for (i = 0; i < baseline->auditsCount; i++)
+            {
+                for (j = 0; j < baseline->audits[i].checksCount; j++)
+                {
+                    if (0 == strcmp("CheckFileExists", baseline->audits[i].checks[j].command))
+                    {
+                        // TODO: Check!
+                        OsConfigLogInfo(AsbGetLog(), "MmiGet called for '%s'", baseline->audits[i].checks[j].command);
+                    }
+                    else 
+                    {
 
-
-
-        
-    //     fileContent = LoadStringFromFile(g_asbConfigFile, false, AsbGetLog());
-    //     if (NULL != fileContent)
-    //     {
-    //         fileContentSizeBytes = strlen(fileContent);
-    //         if (0 == regcomp(&permissionRegex, g_permissionConfigPattern, REG_EXTENDED))
-    //         {
-    //             if (0 == regexec(&permissionRegex, fileContent, 3, matchGroups, 0))
-    //             {
-    //                 // Property value is located in the third match group.
-    //                 if ((IsValidMatchOffsets(matchGroups[0], fileContentSizeBytes)) && 
-    //                     (IsValidMatchOffsets(matchGroups[0], fileContentSizeBytes)) && 
-    //                     (IsValidMatchOffsets(matchGroups[0], fileContentSizeBytes)))
-    //                 {
-    //                     currentMatch = fileContent + matchGroups[2].rm_so;
-    //                     currentMatchSizeBytes = matchGroups[2].rm_eo - matchGroups[2].rm_so;
-                        
-    //                     for (unsigned int i = 0; i < g_permissionConfigMapCount; i++)
-    //                     {
-    //                         if ((currentMatchSizeBytes == strlen(g_permissionConfigMapKeys[i])) && 
-    //                             (0 == strncmp(currentMatch, g_permissionConfigMapKeys[i], currentMatchSizeBytes)))
-    //                         {
-    //                             value = g_permissionConfigMapValues[i];
-    //                             break;
-    //                         }
-    //                     }
-    //                 }
-
-    //                 if (NULL == value) 
-    //                 {
-    //                     if (IsFullLoggingEnabled())
-    //                     {
-    //                         OsConfigLogError(AsbGetLog(), "MmiGet failed to find valid TOML property '%s'", g_permissionConfigName);
-    //                     }
-    //                     status = EINVAL;
-    //                 }
-    //             }
-    //             else 
-    //             {
-    //                 if (IsFullLoggingEnabled())
-    //                 {
-    //                     OsConfigLogError(AsbGetLog(), "MmiGet failed to find TOML property '%s'", g_permissionConfigName);
-    //                 }
-    //                 status = EINVAL;
-    //             }
-
-    //             regfree(&permissionRegex);
-    //         } 
-    //         else 
-    //         {
-    //             OsConfigLogError(AsbGetLog(), "MmiGet failed to compile regular expression '%s'", g_permissionConfigPattern);
-    //             status = EINVAL;
-    //         }
-    //     }
-    //     else 
-    //     {
-    //         if (IsFullLoggingEnabled())
-    //         {
-    //             OsConfigLogError(AsbGetLog(), "MmiGet failed to read TOML file '%s'", g_asbConfigFile);
-    //         }
-    //         status = EINVAL;
-    //     }
-
-        // if (MMI_OK != status)
-        // {
-        //     value = g_permissionConfigMapValues[0];
-        //     status = MMI_OK;
-        // }
-
-        // *payloadSizeBytes = strlen(value);
-
-        // if ((g_maxPayloadSizeBytes > 0) && ((unsigned)*payloadSizeBytes > g_maxPayloadSizeBytes))
-        // {
-        //     OsConfigLogError(AsbGetLog(), "MmiGet(%s, %s) insufficient maxmimum size (%d bytes) versus data size (%d bytes), reported value will be truncated", componentName, objectName, g_maxPayloadSizeBytes, *payloadSizeBytes);
-        //     *payloadSizeBytes = g_maxPayloadSizeBytes;
-        // }
-
-        // *payload = (MMI_JSON_STRING)malloc(*payloadSizeBytes);
-        // if (NULL != *payload)
-        // {
-        //     memset(*payload, 0, *payloadSizeBytes);
-        //     memcpy(*payload, value, *payloadSizeBytes);
-        // }
-        // else
-        // {
-        //     OsConfigLogError(AsbGetLog(), "MmiGet: failed to allocate %d bytes", *payloadSizeBytes + 1);
-        //     *payloadSizeBytes = 0;
-        //     status = ENOMEM;
-        // }
+                    }
+                }
+            }
+        }
+        else
+        {
+            // LOG: ...
+        }
     }
 
     if (IsFullLoggingEnabled())
@@ -267,148 +465,7 @@ int AsbMmiGet(MMI_HANDLE clientSession, const char* componentName, const char* o
         OsConfigLogInfo(AsbGetLog(), "MmiGet(%p, %s, %s, %.*s, %d) returning %d", clientSession, componentName, objectName, *payloadSizeBytes, *payload, *payloadSizeBytes, status);
     }
 
-    // FREE_MEMORY(fileContent);
-
     return status;
-
-
-    
-
-    // int status = MMI_OK;
-    // const char* value = NULL;
-    // char* fileContent = NULL;
-    // unsigned int fileContentSizeBytes = 0;
-    // regmatch_t matchGroups[3] = {0};
-    // regex_t permissionRegex = {0};
-    // char* currentMatch = NULL;
-    // unsigned int currentMatchSizeBytes = 0;
-
-    // if ((NULL == componentName) || (NULL == objectName) || (NULL == payload) || (NULL == payloadSizeBytes))
-    // {
-    //     OsConfigLogError(AsbGetLog(), "MmiGet(%s, %s, %p, %p) called with invalid arguments", componentName, objectName, payload, payloadSizeBytes);
-    //     status = EINVAL;
-    //     return status;
-    // }
-
-    // *payload = NULL;
-    // *payloadSizeBytes = 0;
-
-    // if (!IsValidSession(clientSession))
-    // {
-    //     OsConfigLogError(AsbGetLog(), "MmiGet(%s, %s) called outside of a valid session", componentName, objectName);
-    //     status = EINVAL;
-    // }
-    // else if (0 != strcmp(componentName, g_asbComponentName))
-    // {
-    //     OsConfigLogError(AsbGetLog(), "MmiGet called for an unsupported component name '%s'", componentName);
-    //     status = EINVAL;
-    // }
-    // else if (0 != strcmp(objectName, g_reportedOptInObjectName))
-    // {
-    //     OsConfigLogError(AsbGetLog(), "MmiGet called for an unsupported object name '%s'", componentName);
-    //     status = EINVAL;
-    // }
-    // else
-    // {
-    //     fileContent = LoadStringFromFile(g_asbConfigFile, false, AsbGetLog());
-    //     if (NULL != fileContent)
-    //     {
-    //         fileContentSizeBytes = strlen(fileContent);
-    //         if (0 == regcomp(&permissionRegex, g_permissionConfigPattern, REG_EXTENDED))
-    //         {
-    //             if (0 == regexec(&permissionRegex, fileContent, 3, matchGroups, 0))
-    //             {
-    //                 // Property value is located in the third match group.
-    //                 if ((IsValidMatchOffsets(matchGroups[0], fileContentSizeBytes)) && 
-    //                     (IsValidMatchOffsets(matchGroups[0], fileContentSizeBytes)) && 
-    //                     (IsValidMatchOffsets(matchGroups[0], fileContentSizeBytes)))
-    //                 {
-    //                     currentMatch = fileContent + matchGroups[2].rm_so;
-    //                     currentMatchSizeBytes = matchGroups[2].rm_eo - matchGroups[2].rm_so;
-                        
-    //                     for (unsigned int i = 0; i < g_permissionConfigMapCount; i++)
-    //                     {
-    //                         if ((currentMatchSizeBytes == strlen(g_permissionConfigMapKeys[i])) && 
-    //                             (0 == strncmp(currentMatch, g_permissionConfigMapKeys[i], currentMatchSizeBytes)))
-    //                         {
-    //                             value = g_permissionConfigMapValues[i];
-    //                             break;
-    //                         }
-    //                     }
-    //                 }
-
-    //                 if (NULL == value) 
-    //                 {
-    //                     if (IsFullLoggingEnabled())
-    //                     {
-    //                         OsConfigLogError(AsbGetLog(), "MmiGet failed to find valid TOML property '%s'", g_permissionConfigName);
-    //                     }
-    //                     status = EINVAL;
-    //                 }
-    //             }
-    //             else 
-    //             {
-    //                 if (IsFullLoggingEnabled())
-    //                 {
-    //                     OsConfigLogError(AsbGetLog(), "MmiGet failed to find TOML property '%s'", g_permissionConfigName);
-    //                 }
-    //                 status = EINVAL;
-    //             }
-
-    //             regfree(&permissionRegex);
-    //         } 
-    //         else 
-    //         {
-    //             OsConfigLogError(AsbGetLog(), "MmiGet failed to compile regular expression '%s'", g_permissionConfigPattern);
-    //             status = EINVAL;
-    //         }
-    //     }
-    //     else 
-    //     {
-    //         if (IsFullLoggingEnabled())
-    //         {
-    //             OsConfigLogError(AsbGetLog(), "MmiGet failed to read TOML file '%s'", g_asbConfigFile);
-    //         }
-    //         status = EINVAL;
-    //     }
-
-    //     // Reset status and payload if TOML file could not be parsed or property not found, as it may yet have to be configured.
-    //     if (MMI_OK != status)
-    //     {
-    //         value = g_permissionConfigMapValues[0];
-    //         status = MMI_OK;
-    //     }
-
-    //     *payloadSizeBytes = strlen(value);
-
-    //     if ((g_maxPayloadSizeBytes > 0) && ((unsigned)*payloadSizeBytes > g_maxPayloadSizeBytes))
-    //     {
-    //         OsConfigLogError(AsbGetLog(), "MmiGet(%s, %s) insufficient maxmimum size (%d bytes) versus data size (%d bytes), reported value will be truncated", componentName, objectName, g_maxPayloadSizeBytes, *payloadSizeBytes);
-    //         *payloadSizeBytes = g_maxPayloadSizeBytes;
-    //     }
-
-    //     *payload = (MMI_JSON_STRING)malloc(*payloadSizeBytes);
-    //     if (NULL != *payload)
-    //     {
-    //         memset(*payload, 0, *payloadSizeBytes);
-    //         memcpy(*payload, value, *payloadSizeBytes);
-    //     }
-    //     else
-    //     {
-    //         OsConfigLogError(AsbGetLog(), "MmiGet: failed to allocate %d bytes", *payloadSizeBytes + 1);
-    //         *payloadSizeBytes = 0;
-    //         status = ENOMEM;
-    //     }
-    // }
-
-    // if (IsFullLoggingEnabled())
-    // {
-    //     OsConfigLogInfo(AsbGetLog(), "MmiGet(%p, %s, %s, %.*s, %d) returning %d", clientSession, componentName, objectName, *payloadSizeBytes, *payload, *payloadSizeBytes, status);
-    // }
-
-    // FREE_MEMORY(fileContent);
-
-    // return status;
 }
 
 int AsbMmiSet(MMI_HANDLE clientSession, const char* componentName, const char* objectName, const MMI_JSON_STRING payload, const int payloadSizeBytes)
