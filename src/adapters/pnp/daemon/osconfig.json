@@ -9,8 +9,24 @@
   "IotHubProtocol": 2,
   "Reported": [
     {
-      "ComponentName": "Adhs",
-      "ObjectName": "optIn"
+      "ComponentName": "Service",
+      "ObjectName": "rcctl"
+    },
+    {
+      "ComponentName": "Service",
+      "ObjectName": "systemd"
+    },
+    {
+      "ComponentName": "Service",
+      "ObjectName": "sysv"
+    },
+    {
+      "ComponentName": "Service",
+      "ObjectName": "upstart"
+    },
+    {
+      "ComponentName": "Service",
+      "ObjectName": "src"
     }
   ],
   "ReportingIntervalSeconds": 5

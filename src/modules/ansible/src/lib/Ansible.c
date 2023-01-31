@@ -10,49 +10,36 @@
 #include <parson.h>
 
 #include "Ansible.h"
+#include "AnsibleUtils.h"
+#include "JsonUtils.h"
 
-#define PYTHON_ENVIRONMENT "/etc/osconfig/python"
-#define PYTHON_EXECUTABLE "python3"
-#define PYTHON_PIP_DEPENDENCY "pip"
-#define PYTHON_VENV_DEPENDENCY "venv"
-#define PYTHON_PACKAGE "ansible-core"
-#define ANSIBLE_EXECUTABLE "ansible"
-#define ANSIBLE_GALAXY_EXECUTABLE "ansible-galaxy"
+typedef struct OBJECT_MAPPING
+{
+    const char mimComponentName[64];
+    const char mimObjectName[64];
+    const bool mimDesired;
+    const char ansibleCollectionName[64];
+    const char ansibleModuleName[64];
+} OBJECT_MAPPING;
 
-static const char* g_checkPythonCommand = "which " PYTHON_EXECUTABLE;
-static const char* g_checkPythonPipCommand = PYTHON_EXECUTABLE " -m " PYTHON_PIP_DEPENDENCY " --version";
-static const char* g_checkPythonVenvCommand = PYTHON_EXECUTABLE " -m " PYTHON_VENV_DEPENDENCY " -h";
-static const char* g_checkPythonEnviromentCommand = PYTHON_EXECUTABLE " -m " PYTHON_VENV_DEPENDENCY " " PYTHON_ENVIRONMENT;
-static const char* g_checkPythonPackageCommand = "sh -c '. " PYTHON_ENVIRONMENT "/bin/activate; " PYTHON_EXECUTABLE " -m " PYTHON_PIP_DEPENDENCY " install " PYTHON_PACKAGE "'";
-static const char* g_checkAnsibleCommand = "sh -c '. " PYTHON_ENVIRONMENT "/bin/activate; which " ANSIBLE_EXECUTABLE "'";
-static const char* g_checkAnsibleGalaxyCommand = "sh -c '. " PYTHON_ENVIRONMENT "/bin/activate; which " ANSIBLE_GALAXY_EXECUTABLE "'";
+static const OBJECT_MAPPING g_mappings[] = {
+    {"Service", "rcctl", false, "ansible.builtin", "service_facts"},
+    {"Service", "systemd", false, "ansible.builtin", "service_facts"},
+    {"Service", "sysv", false, "ansible.builtin", "service_facts"},
+    {"Service", "upstart", false, "ansible.builtin", "service_facts"},
+    {"Service", "src", false, "ansible.builtin", "service_facts"},
+    {"Service", "desiredServices", true, "ansible.builtin", "service"},
+    {"Docker", "images", false, "community.docker", "docker_image_info"}};
 
-static const char* g_getPythonVersionCommand = "sh -c '. " PYTHON_ENVIRONMENT "/bin/activate; " PYTHON_EXECUTABLE " --version' | grep 'Python ' | cut -d ' ' -f 2 | tr -d '\n'";
-static const char* g_getPythonLocationCommand = "sh -c '. " PYTHON_ENVIRONMENT "/bin/activate; which " PYTHON_EXECUTABLE "' | tr -d '\n'";
-static const char* g_getAnsibleVersionCommand = "sh -c '. " PYTHON_ENVIRONMENT "/bin/activate; " ANSIBLE_EXECUTABLE " --version' | grep '" ANSIBLE_EXECUTABLE " \\[core ' | cut -d ' ' -f 3 | tr -d ']\n'";
-static const char* g_getAnsibleLocationCommand = "sh -c '. " PYTHON_ENVIRONMENT "/bin/activate; which " ANSIBLE_EXECUTABLE "' | tr -d '\n'";
-static const char* g_getAnsibleGalaxyLocationCommand = "sh -c '. " PYTHON_ENVIRONMENT "/bin/activate; which " ANSIBLE_GALAXY_EXECUTABLE "' | tr -d '\n'";
-
-// typedef struct MIM_ANSIBLE_DATA_MAPPING
-// {
-//     const char mimComponentName[64];
-//     const char mimObjectName[64];
-//     const bool mimDesired;
-//     const char ansibleModuleName[64];
-//     const char ansibleJsonValuePath[64];
-// } MIM_ANSIBLE_DATA_MAPPING;
-
-
-    // {"Service", "rcctl", false, "ansible.builtin.service_facts", ".ansible_facts.services | map(select(.source==\"rcctl\" and .state==\"running\").name)"},
-
+// TODO: Install collections.
 
 static const char* g_ansibleModuleInfo = "{\"Name\": \"Ansible\","
     "\"Description\": \"Provides functionality to observe and configure Ansible\","
     "\"Manufacturer\": \"Microsoft\","
     "\"VersionMajor\": 1,"
     "\"VersionMinor\": 0,"
-    "\"VersionInfo\": \"Copper\","
-    "\"Components\": [\"Ansible\"],"
+    "\"VersionInfo\": \"Zinc\","
+    "\"Components\": [\"Service\"],"
     "\"Lifetime\": 2,"
     "\"UserAccount\": 0}";
 
@@ -73,105 +60,14 @@ static OSCONFIG_LOG_HANDLE AnsibleGetLog()
     return g_log;
 }
 
-int AnsibleCheckDependencies(void)
-{
-    int status = MMI_OK;
-    char* pythonVersion = NULL;
-    char* pythonLocation = NULL;
-    char* ansibleVersion = NULL;
-    char* ansibleLocation = NULL;
-    char* ansibleGalaxyLocation = NULL;
-
-    if (0 != ExecuteCommand(NULL, g_checkPythonCommand, false, false, 0, 0, NULL, NULL, AnsibleGetLog()))
-    {
-        if (IsFullLoggingEnabled())
-        {
-            OsConfigLogError(AnsibleGetLog(), "AnsibleCheckDependencies() cannot find Python executable '%s'", PYTHON_EXECUTABLE);
-        }
-        status = EINVAL;
-    }
-    else if (0 != ExecuteCommand(NULL, g_checkPythonPipCommand, false, false, 0, 0, NULL, NULL, AnsibleGetLog()))
-    {
-        if (IsFullLoggingEnabled())
-        {
-            OsConfigLogError(AnsibleGetLog(), "AnsibleCheckDependencies() cannot find Python dependency '%s'", PYTHON_PIP_DEPENDENCY);
-        }
-        status = EINVAL;
-    }
-    else if (0 != ExecuteCommand(NULL, g_checkPythonVenvCommand, false, false, 0, 0, NULL, NULL, AnsibleGetLog()))
-    {
-        if (IsFullLoggingEnabled())
-        {
-            OsConfigLogError(AnsibleGetLog(), "AnsibleCheckDependencies() cannot find Python dependency '%s'", PYTHON_VENV_DEPENDENCY);
-        }
-        status = EINVAL;
-    }
-    else if (0 != ExecuteCommand(NULL, g_checkPythonEnviromentCommand, false, false, 0, 0, NULL, NULL, AnsibleGetLog()))
-    {
-        if (IsFullLoggingEnabled())
-        {
-            OsConfigLogError(AnsibleGetLog(), "AnsibleCheckDependencies() cannot find Python environment '%s'", PYTHON_ENVIRONMENT);
-        }
-        status = EINVAL;
-    }
-    else if (0 != ExecuteCommand(NULL, g_checkPythonPackageCommand, false, false, 0, 0, NULL, NULL, AnsibleGetLog()))
-    {
-        if (IsFullLoggingEnabled())
-        {
-            OsConfigLogError(AnsibleGetLog(), "AnsibleCheckDependencies() cannot find Python package '%s'", PYTHON_PACKAGE);
-        }
-        status = EINVAL;
-    }
-    else if (0 != ExecuteCommand(NULL, g_checkAnsibleCommand, false, false, 0, 0, NULL, NULL, AnsibleGetLog()))
-    {
-        if (IsFullLoggingEnabled())
-        {
-            OsConfigLogError(AnsibleGetLog(), "AnsibleCheckDependencies() cannot find Ansible executable '%s'", ANSIBLE_EXECUTABLE);
-        }
-        status = EINVAL;
-    }
-    else if (0 != ExecuteCommand(NULL, g_checkAnsibleGalaxyCommand, false, false, 0, 0, NULL, NULL, AnsibleGetLog()))
-    {
-        if (IsFullLoggingEnabled())
-        {
-            OsConfigLogError(AnsibleGetLog(), "AnsibleCheckDependencies() cannot find Ansible executable '%s'", ANSIBLE_GALAXY_EXECUTABLE);
-        }
-        status = EINVAL;
-    }
-    else if ((0 != ExecuteCommand(NULL, g_getPythonVersionCommand, false, false, 0, 0, &pythonVersion, NULL, AnsibleGetLog())) ||
-        (0 != ExecuteCommand(NULL, g_getPythonLocationCommand, false, false, 0, 0, &pythonLocation, NULL, AnsibleGetLog())) ||
-        (0 != ExecuteCommand(NULL, g_getAnsibleVersionCommand, false, false, 0, 0, &ansibleVersion, NULL, AnsibleGetLog())) ||
-        (0 != ExecuteCommand(NULL, g_getAnsibleLocationCommand, false, false, 0, 0, &ansibleLocation, NULL, AnsibleGetLog())) || 
-        (0 != ExecuteCommand(NULL, g_getAnsibleGalaxyLocationCommand, false, false, 0, 0, &ansibleGalaxyLocation, NULL, AnsibleGetLog())))
-    {
-        if (IsFullLoggingEnabled())
-        {
-            OsConfigLogError(AnsibleGetLog(), "AnsibleCheckDependencies() cannot find dependency information");
-        }
-        status = EINVAL;
-    }
-    else
-    {
-        if (IsFullLoggingEnabled())
-        {
-            OsConfigLogInfo(AnsibleGetLog(), "AnsibleCheckDependencies() found Python executable ('%s', '%s')", pythonVersion, pythonLocation);
-            OsConfigLogInfo(AnsibleGetLog(), "AnsibleCheckDependencies() found Ansible executables ('%s', '%s', '%s')", ansibleVersion, ansibleLocation, ansibleGalaxyLocation);
-        }
-    }
-
-    FREE_MEMORY(pythonVersion);
-    FREE_MEMORY(pythonLocation);
-    FREE_MEMORY(ansibleVersion);
-    FREE_MEMORY(ansibleLocation);
-    FREE_MEMORY(ansibleGalaxyLocation);
-
-    return status;
-}
-
 void AnsibleInitialize()
 {
     g_log = OpenLog(g_ansibleLogFile, g_ansibleRolledLogFile);
-    g_enabled = (MMI_OK == AnsibleCheckDependencies());
+
+    if (!(g_enabled = (MMI_OK == AnsibleCheckDependencies(AnsibleGetLog()))))
+    {
+        OsConfigLogError(AnsibleGetLog(), "%s failed to find dependencies", g_ansibleModuleName);
+    }
 
     OsConfigLogInfo(AnsibleGetLog(), "%s initialized", g_ansibleModuleName);
 }
@@ -180,6 +76,7 @@ void AnsibleShutdown(void)
 {
     OsConfigLogInfo(AnsibleGetLog(), "%s shutting down", g_ansibleModuleName);
 
+    g_enabled = false;
     CloseLog(&g_log);
 }
 
@@ -192,14 +89,42 @@ MMI_HANDLE AnsibleMmiOpen(const char* clientName, const unsigned int maxPayloadS
     return handle;
 }
 
-static bool IsValidSession(MMI_HANDLE clientSession)
+static bool AnsibleIsValidSession(MMI_HANDLE clientSession)
 {
     return ((NULL == clientSession) || (0 != strcmp(g_ansibleModuleName, (char*)clientSession)) || (g_referenceCount <= 0)) ? false : true;
 }
 
+static const char* AnsibleGetCollectionName(const char* componentName, const char* objectName, bool desired)
+{
+    for (size_t i = 0; i < ARRAY_SIZE(g_mappings); i++)
+    {
+        if ((0 == strcmp(g_mappings[i].mimComponentName, componentName)) &&
+            (0 == strcmp(g_mappings[i].mimObjectName, objectName)) &&
+            (g_mappings[i].mimDesired == desired))
+        {
+            return g_mappings[i].ansibleCollectionName;
+        }
+    }
+    return NULL;
+}
+
+static const char* AnsibleGetModuleName(const char* componentName, const char* objectName, bool desired)
+{
+    for (size_t i = 0; i < ARRAY_SIZE(g_mappings); i++)
+    {
+        if ((0 == strcmp(g_mappings[i].mimComponentName, componentName)) &&
+            (0 == strcmp(g_mappings[i].mimObjectName, objectName)) &&
+            (g_mappings[i].mimDesired == desired))
+        {
+            return g_mappings[i].ansibleModuleName;
+        }
+    }
+    return NULL;
+}
+
 void AnsibleMmiClose(MMI_HANDLE clientSession)
 {
-    if (IsValidSession(clientSession))
+    if (AnsibleIsValidSession(clientSession))
     {
         --g_referenceCount;
         OsConfigLogInfo(AnsibleGetLog(), "MmiClose(%p)", clientSession);
@@ -245,17 +170,141 @@ int AnsibleMmiGetInfo(const char* clientName, MMI_JSON_STRING* payload, int* pay
 
 int AnsibleMmiGet(MMI_HANDLE clientSession, const char* componentName, const char* objectName, MMI_JSON_STRING* payload, int* payloadSizeBytes)
 {
-    OsConfigLogInfo(AnsibleGetLog(), "No reported objects, MmiGet not implemented");
+    int status = MMI_OK;
+    char* result = NULL;
+    
+    const char* ansibleCollectionName = NULL;
+    const char* ansibleModuleName = NULL;
 
-    // json_dot
-    
-    UNUSED(clientSession);
-    UNUSED(componentName);
-    UNUSED(objectName);
-    UNUSED(payload);
-    UNUSED(payloadSizeBytes);
-    
-    return EPERM;
+    JSON_Value* rootValue = NULL;
+    JSON_Object* rootObject = NULL;
+    JSON_Value* resultValue = NULL;
+
+    if ((NULL == componentName) || (NULL == objectName) || (NULL == payload) || (NULL == payloadSizeBytes))
+    {
+        OsConfigLogError(AnsibleGetLog(), "MmiGet(%s, %s, %p, %p) called with invalid arguments", componentName, objectName, payload, payloadSizeBytes);
+        status = EINVAL;
+        return status;
+    }
+
+    *payload = NULL;
+    *payloadSizeBytes = 0;
+
+    ansibleCollectionName = AnsibleGetCollectionName(componentName, objectName, false);
+    ansibleModuleName = AnsibleGetModuleName(componentName, objectName, false);
+
+    if (!AnsibleIsValidSession(clientSession))
+    {
+        OsConfigLogError(AnsibleGetLog(), "MmiGet(%s, %s) called outside of a valid session", componentName, objectName);
+        status = EINVAL;
+    }
+    else if (!g_enabled)
+    {
+        OsConfigLogError(AnsibleGetLog(), "MmiGet(%s, %s) called with missing dependencies", componentName, objectName);
+        status = EINVAL;
+    }
+    else if ((NULL == ansibleCollectionName) || (NULL == ansibleModuleName))
+    {
+        OsConfigLogError(AnsibleGetLog(), "MmiGet(%s, %s) called with unsupported component name or object name", componentName, objectName);
+        status = EINVAL;
+    }
+    else if ((MMI_OK != AnsibleExecuteModule(ansibleCollectionName, ansibleModuleName, NULL, &result, AnsibleGetLog()) || (NULL == result)))
+    {
+        OsConfigLogError(AnsibleGetLog(), "MmiGet(%s, %s) failed to execute Ansible module", componentName, objectName);
+        status = EINVAL;
+    }
+    else if (NULL == (rootValue = json_parse_string(result)))
+    {
+        OsConfigLogError(AnsibleGetLog(), "MmiGet(%s, %s) failed to parse JSON string '%s'", componentName, objectName, result);
+        status = EINVAL;
+    }
+    else if (NULL == (rootObject = json_value_get_object(rootValue)))
+    {
+        OsConfigLogError(AnsibleGetLog(), "MmiGet(%s, %s) failed to find root JSON object", componentName, objectName);
+        status = EINVAL;
+    }
+    else 
+    {
+        // Result from command has been parsed and the variable can be repurposed.
+        FREE_MEMORY(result);
+
+        if (0 == strcmp(componentName, "Service"))
+        {
+            resultValue = json_value_deep_copy(json_object_dotget_value(rootObject, "ansible_facts.services"));
+
+            if (NULL != resultValue)
+            {
+                RemoveObjectsWithPropertyValueNotEqual(resultValue, "source", objectName);
+                RemoveObjectsWithPropertyValueNotEqual(resultValue, "state", "running");
+                ConvertObjectsWithPropertyNameToArray(&resultValue, "name");
+            }
+            else 
+            {
+                OsConfigLogError(AnsibleGetLog(), "MmiGet(%s, %s) failed to find JSON object '%s'", componentName, objectName, "ansible_facts.services");
+                status = EINVAL;
+            }
+        }
+        else if (0 == strcmp(componentName, "Docker"))
+        {
+            // TODO: ...   
+        }
+        else if (0 == strcmp(componentName, "User"))
+        {
+            // TODO: ...
+        }
+
+        if (NULL != resultValue)
+        {
+            result = json_serialize_to_string(resultValue);
+        }
+    }
+
+    // Reset status.
+    if (MMI_OK != status)
+    {
+        status = MMI_OK;
+        result = "";
+    }
+
+    if (NULL != result)
+    {
+        *payloadSizeBytes = strlen(result);
+        if ((g_maxPayloadSizeBytes > 0) && ((unsigned)*payloadSizeBytes > g_maxPayloadSizeBytes))
+        {
+            OsConfigLogError(AnsibleGetLog(), "MmiGet(%s, %s) insufficient maxmimum size (%d bytes) versus data size (%d bytes), reported value will be truncated", componentName, objectName, g_maxPayloadSizeBytes, *payloadSizeBytes);
+            *payloadSizeBytes = g_maxPayloadSizeBytes;
+        }
+
+        *payload = (MMI_JSON_STRING)malloc(*payloadSizeBytes);
+        if (NULL != *payload)
+        {
+            memset(*payload, 0, *payloadSizeBytes);
+            memcpy(*payload, result, *payloadSizeBytes);
+        }
+        else 
+        {
+            OsConfigLogError(AnsibleGetLog(), "MmiGet failed to allocate %d bytes", *payloadSizeBytes + 1);
+            *payloadSizeBytes = 0;
+            status = ENOMEM;
+        }
+    }
+
+    if (NULL != rootValue)
+    {
+        json_value_free(rootValue);
+    }
+
+    if (NULL != resultValue)
+    {
+        json_value_free(resultValue);
+    }
+
+    if (IsFullLoggingEnabled())
+    {
+        OsConfigLogInfo(AnsibleGetLog(), "MmiGet(%p, %s, %s, %.*s, %d) returning %d", clientSession, componentName, objectName, *payloadSizeBytes, *payload, *payloadSizeBytes, status);
+    }
+
+    return status;
 }
 
 int AnsibleMmiSet(MMI_HANDLE clientSession, const char* componentName, const char* objectName, const MMI_JSON_STRING payload, const int payloadSizeBytes)
