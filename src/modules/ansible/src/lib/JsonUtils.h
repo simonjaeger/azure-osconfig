@@ -11,8 +11,10 @@ extern "C"
 {
 #endif
 
-void ConvertObjectsWithPropertyNameToArray(JSON_Value** rootValue, const char* propertyName);
+void ConvertObjectArrayPropertyValueToArray(JSON_Value** rootValue, const char* propertyName);
 void RemoveObjectsWithPropertyValueNotEqual(JSON_Value* rootValue, const char* propertyName, const char* propertyValue);
+void ConvertObjectToKeyValuePairString(const JSON_Value *rootValue, char **buffer);
+void ConvertObjectArrayToKeyValuePairString(const JSON_Value *rootValue, char **buffer);
 
 #ifdef __cplusplus
 }

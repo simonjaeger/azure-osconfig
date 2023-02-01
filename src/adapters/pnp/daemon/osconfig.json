@@ -29,5 +29,5 @@
       "ObjectName": "src"
     }
   ],
-  "ReportingIntervalSeconds": 5
+  "ReportingIntervalSeconds": 15
 }

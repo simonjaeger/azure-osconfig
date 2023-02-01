@@ -10,6 +10,7 @@ extern "C"
 #endif
 
 int AnsibleCheckDependencies(void* log);
+int AnsibleCheckCollection(const char* collectionName, void* log);
 int AnsibleExecuteModule(const char* collectionName, const char* moduleName, const char* moduleArguments, char** result, void* log);
 
 #ifdef __cplusplus

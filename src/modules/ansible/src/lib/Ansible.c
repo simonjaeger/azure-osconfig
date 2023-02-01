@@ -23,7 +23,7 @@ typedef struct OBJECT_MAPPING
     const char ansibleModuleArguments[64];
 } OBJECT_MAPPING;
 
-static const OBJECT_MAPPING g_mappings[] = {
+static const OBJECT_MAPPING g_objectMappings[] = {
     {"Service", "rcctl", false, "ansible.builtin", "service_facts", ""},
     {"Service", "systemd", false, "ansible.builtin", "service_facts", ""},
     {"Service", "sysv", false, "ansible.builtin", "service_facts", ""},
@@ -69,13 +69,13 @@ static bool AnsibleIsValidSession(MMI_HANDLE clientSession)
 
 static const OBJECT_MAPPING* AnsibleGetObjectMapping(const char* componentName, const char* objectName, bool desired)
 {
-    for (size_t i = 0; i < ARRAY_SIZE(g_mappings); i++)
+    for (size_t i = 0; i < ARRAY_SIZE(g_objectMappings); i++)
     {
-        if ((0 == strcmp(g_mappings[i].mimComponentName, componentName)) &&
-            (0 == strcmp(g_mappings[i].mimObjectName, objectName)) &&
-            (g_mappings[i].mimDesired == desired))
+        if ((0 == strcmp(g_objectMappings[i].mimComponentName, componentName)) &&
+            (0 == strcmp(g_objectMappings[i].mimObjectName, objectName)) &&
+            (g_objectMappings[i].mimDesired == desired))
         {
-            return &g_mappings[i];
+            return &g_objectMappings[i];
         }
     }
     return NULL;
@@ -83,30 +83,30 @@ static const OBJECT_MAPPING* AnsibleGetObjectMapping(const char* componentName, 
 
 static const char* AnsibleGetCollectionName(const char* componentName, const char* objectName, bool desired)
 {
-    const OBJECT_MAPPING* mapping = NULL;
-    if (NULL != (mapping = AnsibleGetObjectMapping(componentName, objectName, desired)))
+    const OBJECT_MAPPING* objectMapping = NULL;
+    if (NULL != (objectMapping = AnsibleGetObjectMapping(componentName, objectName, desired)))
     {
-        return mapping->ansibleCollectionName;
+        return objectMapping->ansibleCollectionName;
     }
     return NULL;
 }
 
 static const char* AnsibleGetModuleName(const char* componentName, const char* objectName, bool desired)
 {
-    const OBJECT_MAPPING* mapping = NULL;
-    if (NULL != (mapping = AnsibleGetObjectMapping(componentName, objectName, desired)))
+    const OBJECT_MAPPING* objectMapping = NULL;
+    if (NULL != (objectMapping = AnsibleGetObjectMapping(componentName, objectName, desired)))
     {
-        return mapping->ansibleModuleName;
+        return objectMapping->ansibleModuleName;
     }
     return NULL;
 }
 
 static const char* AnsibleGetModuleArguments(const char* componentName, const char* objectName, bool desired)
 {
-    const OBJECT_MAPPING* mapping = NULL;
-    if (NULL != (mapping = AnsibleGetObjectMapping(componentName, objectName, desired)))
+    const OBJECT_MAPPING* objectMapping = NULL;
+    if (NULL != (objectMapping = AnsibleGetObjectMapping(componentName, objectName, desired)))
     {
-        return mapping->ansibleModuleArguments;
+        return objectMapping->ansibleModuleArguments;
     }
     return NULL;
 }
@@ -117,12 +117,22 @@ void AnsibleInitialize()
 
     if ((g_enabled = (MMI_OK == AnsibleCheckDependencies(AnsibleGetLog()))))
     {
-        OsConfigLogInfo(AnsibleGetLog(), "%s initialized", g_ansibleModuleName);
+        for (size_t i = 0; i < ARRAY_SIZE(g_objectMappings); i++)
+        {
+            if (MMI_OK != AnsibleCheckCollection(g_objectMappings[i].ansibleCollectionName, AnsibleGetLog()))
+            {
+                g_enabled = false;
+                break;
+            }
+        }
     }
-    else 
+
+    if (!g_enabled)
     {
-        OsConfigLogError(AnsibleGetLog(), "%s failed to initialize (missing dependencies)", g_ansibleModuleName);
+        OsConfigLogError(AnsibleGetLog(), "%s failed to find dependencies", g_ansibleModuleName);
     }
+
+    OsConfigLogInfo(AnsibleGetLog(), "%s initialized", g_ansibleModuleName);
 }
 
 void AnsibleShutdown(void)
@@ -149,7 +159,7 @@ void AnsibleMmiClose(MMI_HANDLE clientSession)
         --g_referenceCount;
         OsConfigLogInfo(AnsibleGetLog(), "MmiClose(%p)", clientSession);
     }
-    else 
+    else
     {
         OsConfigLogError(AnsibleGetLog(), "MmiClose() called outside of a valid session");
     }
@@ -164,7 +174,7 @@ int AnsibleMmiGetInfo(const char* clientName, MMI_JSON_STRING* payload, int* pay
         OsConfigLogError(AnsibleGetLog(), "MmiGetInfo(%s, %p, %p) called with invalid arguments", clientName, payload, payloadSizeBytes);
         return status;
     }
-    
+
     *payloadSizeBytes = (int)strlen(g_ansibleModuleInfo);
     *payload = (MMI_JSON_STRING)malloc(*payloadSizeBytes);
     if (*payload)
@@ -175,11 +185,11 @@ int AnsibleMmiGetInfo(const char* clientName, MMI_JSON_STRING* payload, int* pay
     }
     else
     {
-        OsConfigLogError(AnsibleGetLog(), "MmiGetInfo: failed to allocate %d bytes", *payloadSizeBytes);
+        OsConfigLogError(AnsibleGetLog(), "MmiGetInfo failed to allocate %d bytes", *payloadSizeBytes);
         *payloadSizeBytes = 0;
         status = ENOMEM;
     }
-    
+
     if (IsFullLoggingEnabled())
     {
         OsConfigLogInfo(AnsibleGetLog(), "MmiGetInfo(%s, %.*s, %d) returning %d", clientName, *payloadSizeBytes, *payload, *payloadSizeBytes, status);
@@ -192,7 +202,7 @@ int AnsibleMmiGet(MMI_HANDLE clientSession, const char* componentName, const cha
 {
     int status = MMI_OK;
     char* result = NULL;
-    
+
     const char* ansibleCollectionName = NULL;
     const char* ansibleModuleName = NULL;
     const char* ansibleModuleArguments = NULL;
@@ -245,9 +255,9 @@ int AnsibleMmiGet(MMI_HANDLE clientSession, const char* componentName, const cha
         OsConfigLogError(AnsibleGetLog(), "MmiGet(%s, %s) failed to find root JSON object", componentName, objectName);
         status = EINVAL;
     }
-    else 
+    else
     {
-        // Result from command has been parsed and the variable can be repurposed.
+        // Command result has been parsed and the variable can be repurposed.
         FREE_MEMORY(result);
 
         if (0 == strcmp(componentName, "Service"))
@@ -258,9 +268,9 @@ int AnsibleMmiGet(MMI_HANDLE clientSession, const char* componentName, const cha
             {
                 RemoveObjectsWithPropertyValueNotEqual(resultValue, "source", objectName);
                 RemoveObjectsWithPropertyValueNotEqual(resultValue, "state", "running");
-                ConvertObjectsWithPropertyNameToArray(&resultValue, "name");
+                ConvertObjectArrayPropertyValueToArray(&resultValue, "name");
             }
-            else 
+            else
             {
                 OsConfigLogError(AnsibleGetLog(), "MmiGet(%s, %s) failed to find JSON object '%s'", componentName, objectName, "ansible_facts.services");
                 status = EINVAL;
@@ -268,7 +278,7 @@ int AnsibleMmiGet(MMI_HANDLE clientSession, const char* componentName, const cha
         }
         else if (0 == strcmp(componentName, "Docker"))
         {
-            // TODO: ...   
+            // TODO: ...
         }
         else if (0 == strcmp(componentName, "User"))
         {
@@ -302,7 +312,7 @@ int AnsibleMmiGet(MMI_HANDLE clientSession, const char* componentName, const cha
             memset(*payload, 0, *payloadSizeBytes);
             memcpy(*payload, result, *payloadSizeBytes);
         }
-        else 
+        else
         {
             OsConfigLogError(AnsibleGetLog(), "MmiGet failed to allocate %d bytes", *payloadSizeBytes + 1);
             *payloadSizeBytes = 0;
@@ -332,10 +342,10 @@ int AnsibleMmiSet(MMI_HANDLE clientSession, const char* componentName, const cha
 {
     int status = MMI_OK;
     char *buffer = NULL;
-    
+
     const char* ansibleCollectionName = NULL;
     const char* ansibleModuleName = NULL;
-    const char* ansibleModuleArguments = NULL;
+    char *ansibleModuleArguments = NULL;
 
     JSON_Value* rootValue = NULL;
 
@@ -345,11 +355,10 @@ int AnsibleMmiSet(MMI_HANDLE clientSession, const char* componentName, const cha
         status = EINVAL;
         return status;
     }
-    
+
     ansibleCollectionName = AnsibleGetCollectionName(componentName, objectName, true);
     ansibleModuleName = AnsibleGetModuleName(componentName, objectName, true);
-    ansibleModuleArguments = AnsibleGetModuleArguments(componentName, objectName, true);
-    
+
     if (!AnsibleIsValidSession(clientSession))
     {
         OsConfigLogError(AnsibleGetLog(), "MmiSet(%s, %s) called outside of a valid session", componentName, objectName);
@@ -370,36 +379,44 @@ int AnsibleMmiSet(MMI_HANDLE clientSession, const char* componentName, const cha
         OsConfigLogError(AnsibleGetLog(), "MmiSet failed to allocate %d bytes", payloadSizeBytes + 1);
         status = ENOMEM;
     }
-    else 
+    else
     {
         memset(buffer, 0, payloadSizeBytes + 1);
         memcpy(buffer, payload, payloadSizeBytes);
 
         if (NULL != (rootValue = json_parse_string(buffer)))
         {
-            OsConfigLogInfo(AnsibleGetLog(), "%s", buffer);
+            if (0 == strcmp(componentName, "Service"))
+            {
+                ConvertObjectArrayToKeyValuePairString(rootValue, &ansibleModuleArguments);
+            }
+            else if (0 == strcmp(componentName, "Docker"))
+            {
+                // TODO: ...
+            }
+            else if (0 == strcmp(componentName, "User"))
+            {
+                // TODO: ...
+            }
+
+            if ((NULL == ansibleModuleArguments) || (MMI_OK != AnsibleExecuteModule(ansibleCollectionName, ansibleModuleName, ansibleModuleArguments, NULL, AnsibleGetLog())))
+            {
+                OsConfigLogError(AnsibleGetLog(), "MmiSet(%s, %s) failed to execute Ansible module", componentName, objectName);
+                status = EINVAL;
+            }
         }
-        else 
+        else
         {
             OsConfigLogError(AnsibleGetLog(), "MmiSet(%s, %s) failed to parse JSON string '%s'", componentName, objectName, buffer);
             status = EINVAL;
         }
     }
 
+    FREE_MEMORY(buffer);
+    FREE_MEMORY(ansibleModuleArguments);
 
+    OsConfigLogInfo(AnsibleGetLog(), "MmiSet(%p, %s, %s, %.*s, %d) returning %d", clientSession, componentName, objectName, payloadSizeBytes, payload, payloadSizeBytes, status);
 
-
-
-    // Convert key as ... 
-    // {"name", "state"}
-    UNUSED(ansibleModuleArguments);
-    
-    UNUSED(clientSession);
-    UNUSED(componentName);
-    UNUSED(objectName);
-    UNUSED(payload);
-    UNUSED(payloadSizeBytes);
-    
     return status;
 }
 

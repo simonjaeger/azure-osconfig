@@ -18,6 +18,7 @@
 #define PYTHON_PACKAGE "ansible-core"
 #define ANSIBLE_EXECUTABLE "ansible"
 #define ANSIBLE_GALAXY_EXECUTABLE "ansible-galaxy"
+#define ANSIBLE_DEFAULT_COLLECTION "ansible.builtin"
 
 static const char* g_checkPythonCommand = "which " PYTHON_EXECUTABLE;
 static const char* g_checkPythonPipCommand = PYTHON_EXECUTABLE " -m " PYTHON_PIP_DEPENDENCY " --version";
@@ -33,7 +34,9 @@ static const char* g_getAnsibleVersionCommand = "sh -c '. " PYTHON_ENVIRONMENT "
 static const char* g_getAnsibleLocationCommand = "sh -c '. " PYTHON_ENVIRONMENT "/bin/activate; which " ANSIBLE_EXECUTABLE "' | tr -d '\n'";
 static const char* g_getAnsibleGalaxyLocationCommand = "sh -c '. " PYTHON_ENVIRONMENT "/bin/activate; which " ANSIBLE_GALAXY_EXECUTABLE "' | tr -d '\n'";
 
-static const char* g_runAnsibleModuleCommand = "sh -c '. " PYTHON_ENVIRONMENT "/bin/activate; " ANSIBLE_EXECUTABLE " localhost -m %s.%s -a \"%s\" -o 2> /dev/null' | grep -o '{.*'";
+static const char* g_runAnsibleModuleCommand = "printf \"%s\"; sh -c '. " PYTHON_ENVIRONMENT "/bin/activate; " ANSIBLE_EXECUTABLE " localhost -m %s.%s -a \"%s\" -o 2> /dev/null' | grep -o '{.*'";
+static const char* g_runAnsibleModuleArgumentsCommand = "printf \"%s\" | xargs -I {} sh -c '. " PYTHON_ENVIRONMENT "/bin/activate; " ANSIBLE_EXECUTABLE " localhost -m %s.%s -a \"{}\" -o 2> /dev/null' | grep -o '{.*'";
+static const char* g_runAnsibleGalaxyCommand = " sh -c '. " PYTHON_ENVIRONMENT "/bin/activate; " ANSIBLE_GALAXY_EXECUTABLE " collection install %s'";
 
 int AnsibleCheckDependencies(void* log)
 {
@@ -130,36 +133,101 @@ int AnsibleCheckDependencies(void* log)
     return status;
 }
 
-int AnsibleExecuteModule(const char* collectionName, const char* moduleName, const char* moduleArguments, char** result, void* log)
+int AnsibleCheckCollection(const char* collectionName, void* log)
 {
     int status = MMI_OK;
     char* commandBuffer = NULL;
     int commandBufferSizeBytes = 0;
 
-    commandBufferSizeBytes = snprintf(NULL, 0, g_runAnsibleModuleCommand, collectionName, moduleName, (NULL == moduleArguments ? "" : moduleArguments));
-    commandBuffer = malloc(commandBufferSizeBytes + 1);
-
-    if (NULL != commandBuffer)
+    if (NULL == collectionName)
     {
-        memset(commandBuffer, 0, commandBufferSizeBytes + 1);
-        snprintf(commandBuffer, commandBufferSizeBytes + 1, g_runAnsibleModuleCommand, collectionName, moduleName, (NULL == moduleArguments ? "" : moduleArguments));
-
-        if ((0 != ExecuteCommand(NULL, commandBuffer, false, false, 0, 0, result, NULL, log)))
+        if (IsFullLoggingEnabled())
         {
+            OsConfigLogError(log, "AnsibleCheckCollection(%s) called with invalid arguments", collectionName);
+        }
+        status = EINVAL;
+    }
+    else if (0 == strcmp(collectionName, ANSIBLE_DEFAULT_COLLECTION))
+    {
+        // NOOP.
+    }
+    else 
+    {
+        commandBufferSizeBytes = snprintf(NULL, 0, g_runAnsibleGalaxyCommand, collectionName);
+        commandBuffer = malloc(commandBufferSizeBytes + 1);
+        
+        if (NULL != commandBuffer)
+        {
+            memset(commandBuffer, 0, commandBufferSizeBytes + 1);
+            snprintf(commandBuffer, commandBufferSizeBytes + 1, g_runAnsibleGalaxyCommand, collectionName);
+
+            if ((0 != ExecuteCommand(NULL, commandBuffer, false, false, 0, 0, NULL, NULL, log)))
+            {
+                if (IsFullLoggingEnabled())
+                {
+                    OsConfigLogError(log, "AnsibleCheckCollection(%s) failed to execute command '%s'", collectionName, commandBuffer);
+                }
+                status = EINVAL;
+            }
+        }
+        else 
+        { 
             if (IsFullLoggingEnabled())
             {
-                OsConfigLogError(log, "AnsibleExecute(%s, %s, %s, %p) failed to execute command '%s'", collectionName, moduleName, moduleArguments, result, commandBuffer);
+                OsConfigLogError(log, "AnsibleCheckCollection(%s) failed to allocate %d bytes", collectionName, commandBufferSizeBytes + 1);
             }
             status = EINVAL;
         }
     }
-    else 
-    { 
+
+    FREE_MEMORY(commandBuffer);
+
+    return status;
+}
+
+int AnsibleExecuteModule(const char* collectionName, const char* moduleName, const char* moduleArguments, char** result, void* log)
+{
+    int status = MMI_OK;
+    const char* format = NULL;
+    char* commandBuffer = NULL;
+    int commandBufferSizeBytes = 0;
+    
+    if ((NULL == collectionName) || (NULL == moduleName))
+    {
         if (IsFullLoggingEnabled())
         {
-            OsConfigLogError(log, "AnsibleExecute(%s, %s, %s, %p) failed to allocate %d bytes", collectionName, moduleName, moduleArguments, result, commandBufferSizeBytes + 1);
+            OsConfigLogError(log, "AnsibleExecute(%s, %s, %s, %p) called with invalid arguments", collectionName, moduleName, moduleArguments, result);
         }
         status = EINVAL;
+    }
+    else 
+    {
+        format = ((NULL != moduleArguments) && (strlen(moduleArguments) > 0)) ? g_runAnsibleModuleArgumentsCommand : g_runAnsibleModuleCommand;
+        commandBufferSizeBytes = snprintf(NULL, 0, format, ((NULL == moduleArguments) ? "" : moduleArguments), collectionName, moduleName);
+        commandBuffer = malloc(commandBufferSizeBytes + 1);
+
+        if (NULL != commandBuffer)
+        {
+            memset(commandBuffer, 0, commandBufferSizeBytes + 1);
+            snprintf(commandBuffer, commandBufferSizeBytes + 1, format, ((NULL == moduleArguments) ? "" : moduleArguments), collectionName, moduleName);
+
+            if ((0 != ExecuteCommand(NULL, commandBuffer, false, false, 0, 0, result, NULL, log)))
+            {
+                if (IsFullLoggingEnabled())
+                {
+                    OsConfigLogError(log, "AnsibleExecute(%s, %s, %s, %p) failed to execute command '%s'", collectionName, moduleName, moduleArguments, result, commandBuffer);
+                }
+                status = EINVAL;
+            }
+        }
+        else 
+        { 
+            if (IsFullLoggingEnabled())
+            {
+                OsConfigLogError(log, "AnsibleExecute(%s, %s, %s, %p) failed to allocate %d bytes", collectionName, moduleName, moduleArguments, result, commandBufferSizeBytes + 1);
+            }
+            status = EINVAL;
+        }
     }
 
     FREE_MEMORY(commandBuffer);

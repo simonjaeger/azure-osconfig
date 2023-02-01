@@ -11,7 +11,7 @@
 
 #include "JsonUtils.h"
 
-void ConvertObjectsWithPropertyNameToArray(JSON_Value** rootValue, const char* propertyName)
+void ConvertObjectArrayPropertyValueToArray(JSON_Value** rootValue, const char* propertyName)
 {
     JSON_Object* rootObject = NULL;
     JSON_Object* currentObject = NULL;
@@ -70,6 +70,99 @@ void RemoveObjectsWithPropertyValueNotEqual(JSON_Value* rootValue, const char* p
                         count--;
                         continue;
                     }
+                }
+            }
+        }
+    }
+}
+
+void ConvertObjectToKeyValuePairString(const JSON_Value* rootValue, char** buffer)
+{
+    JSON_Object* rootObject = NULL;
+    JSON_Value* currentValue = NULL;
+
+    size_t i = 0;
+    size_t count = 0;
+    size_t length = 0;
+
+    if ((NULL != buffer) && (NULL != (rootObject = json_value_get_object(rootValue))))
+    {
+        count = json_object_get_count(rootObject);
+
+        for (i = 0; i < count; i++)
+        {
+            if (NULL != (currentValue = json_object_get_value(rootObject, json_object_get_name(rootObject, i))))
+            {
+                if (JSONString == json_value_get_type(currentValue))
+                {
+                    length = strlen(json_object_get_name(rootObject, i)) + json_value_get_string_len(currentValue) + 2;
+
+                    if (NULL == *buffer)
+                    {
+                        *buffer = malloc(length + 1);
+                        memset(*buffer, 0, length + 1);
+                    }
+                    else
+                    {
+                        *buffer = realloc(*buffer, strlen(*buffer) + length + 1);
+                    }
+
+                    if (NULL != *buffer)
+                    {
+                        strcat(*buffer, json_object_get_name(rootObject, i));
+                        strcat(*buffer, "=");
+                        strcat(*buffer, json_value_get_string(currentValue));
+                        strcat(*buffer, " ");
+                    }
+                }
+            }
+        }
+    }
+}
+
+void ConvertObjectArrayToKeyValuePairString(const JSON_Value* rootValue, char** buffer)
+{
+    JSON_Array* rootArray = NULL;
+    JSON_Value* currentValue = NULL;
+
+    size_t i = 0;
+    size_t count = 0;
+    size_t length = 0;
+
+    char* tmp = NULL;
+
+    if ((NULL != buffer) && (NULL != (rootArray = json_value_get_array(rootValue))))
+    {
+        count = json_array_get_count(rootArray);
+
+        for (i = 0; i < count; i++)
+        {
+            if (NULL != (currentValue = json_array_get_value(rootArray, i)))
+            {
+                ConvertObjectToKeyValuePairString(currentValue, &tmp);
+
+                if (NULL != tmp)
+                {
+                    length = strlen(tmp) + 1;
+
+                    if (NULL == *buffer)
+                    {
+                        *buffer = malloc(length + 1);
+                        memset(*buffer, 0, length + 1);
+                    }
+                    else
+                    {
+                        *buffer = realloc(*buffer, strlen(*buffer) + length + 1);
+                    }
+
+                    if (NULL != *buffer)
+                    {
+                        strcat(*buffer, tmp);
+                        strcat(*buffer, "\n");
+                    }
+
+                    FREE_MEMORY(tmp);
+                    tmp = NULL;
                 }
             }
         }
