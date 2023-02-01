@@ -29,7 +29,7 @@ static const OBJECT_MAPPING g_objectMappings[] = {
     {"Service", "sysv", false, "ansible.builtin", "service_facts", ""},
     {"Service", "upstart", false, "ansible.builtin", "service_facts", ""},
     {"Service", "src", false, "ansible.builtin", "service_facts", ""},
-    {"Service", "desiredServices", true, "ansible.builtin", "service", "name=%s state=%s"},
+    {"Service", "desiredServices", true, "ansible.builtin", "service", ""},
     {"User", "users", true, "ansible.builtin", "getent", "database=passwd"},
     {"User", "groups", true, "ansible.builtin", "getent", "database=group"},
     {"Docker", "images", false, "community.docker", "docker_image_info", ""}};
