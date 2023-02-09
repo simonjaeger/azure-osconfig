@@ -196,7 +196,7 @@ int AnsibleExecuteModule(const char* collectionName, const char* moduleName, con
     {
         if (IsFullLoggingEnabled())
         {
-            OsConfigLogError(log, "AnsibleExecute(%s, %s, %s, %p) called with invalid arguments", collectionName, moduleName, moduleArguments, result);
+            OsConfigLogError(log, "AnsibleExecuteModule(%s, %s, %s, %p) called with invalid arguments", collectionName, moduleName, moduleArguments, result);
         }
         status = EINVAL;
     }
@@ -215,7 +215,7 @@ int AnsibleExecuteModule(const char* collectionName, const char* moduleName, con
             {
                 if (IsFullLoggingEnabled())
                 {
-                    OsConfigLogError(log, "AnsibleExecute(%s, %s, %s, %p) failed to execute command '%s'", collectionName, moduleName, moduleArguments, result, commandBuffer);
+                    OsConfigLogError(log, "AnsibleExecuteModule(%s, %s, %s, %p) failed to execute command '%s'", collectionName, moduleName, moduleArguments, result, commandBuffer);
                 }
                 status = EINVAL;
             }
@@ -224,7 +224,7 @@ int AnsibleExecuteModule(const char* collectionName, const char* moduleName, con
         { 
             if (IsFullLoggingEnabled())
             {
-                OsConfigLogError(log, "AnsibleExecute(%s, %s, %s, %p) failed to allocate %d bytes", collectionName, moduleName, moduleArguments, result, commandBufferSizeBytes + 1);
+                OsConfigLogError(log, "AnsibleExecuteModule(%s, %s, %s, %p) failed to allocate %d bytes", collectionName, moduleName, moduleArguments, result, commandBufferSizeBytes + 1);
             }
             status = EINVAL;
         }

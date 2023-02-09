@@ -13,6 +13,51 @@
 #include "AnsibleUtils.h"
 #include "JsonUtils.h"
 
+// static const char* g_serviceComponentName = "Service";
+// static const char* g_userComponentName = "User";
+
+// static const char* g_serviceReportedObjectNames[] = {"rcctl", "systemd", "sysv", "upstart", "src"};
+// static const char* g_userReportedObjectNames[] = {"users", "groups"};
+
+// static const char* g_serviceDesiredObjectNames[] = {"desiredServices"};
+// static const char* g_userDesiredObjectNames[] = {"desiredUsers", "desiredGroups"};
+
+// static const char* g_serviceAnsibleCollectionName = "ansible.builtin";
+// static const char* g_userAnsibleCollectionName = "ansible.builtin";
+
+// static const char* g_serviceAnsibleModuleName = "ansible.service_facts";
+
+
+// Not call at all, to be generic?
+// Be in charge of calling multiple times?
+
+// get run it... 
+
+// What if you have an array, desiredservice, to run for many
+// What if you want to build reported from multipe assets
+
+typedef struct ANSIBLE_DESIRED_OBJECT {
+    const char componentName[64];
+    const char objectName[64];
+    const char ansibleCollectionName[64];
+    const char ansibleModuleName[64];
+    int (*const handler)(const struct ANSIBLE_DESIRED_OBJECT* object, const char* payload);
+} ANSIBLE_DESIRED_OBJECT;
+
+typedef struct ANSIBLE_REPORTED_OBJECT {
+    const char componentName[64];
+    const char objectName[64];
+    const char ansibleCollectionName[64];
+    const char ansibleModuleName[64];
+    const char ansibleModuleArguments[64];
+    int (*const handler)(const struct ANSIBLE_REPORTED_OBJECT* object, char** result);
+} ANSIBLE_REPORTED_OBJECT;
+
+static const ANSIBLE_REPORTED_OBJECT g_reportedObjects[] = {
+    {"Service", "systemd", "ansible.builtin", "service_facts", "", NULL},
+    {"Service", "src", "ansible.builtin", "service_facts", "", NULL},
+    {"User", "users", "ansible.builtin", "getent", "database=passwd", NULL}};
+
 typedef struct OBJECT_MAPPING
 {
     const char mimComponentName[64];
@@ -33,8 +78,6 @@ static const OBJECT_MAPPING g_objectMappings[] = {
     {"User", "users", true, "ansible.builtin", "getent", "database=passwd"},
     {"User", "groups", true, "ansible.builtin", "getent", "database=group"},
     {"Docker", "images", false, "community.docker", "docker_image_info", ""}};
-
-// TODO: Install collections.
 
 static const char* g_ansibleModuleInfo = "{\"Name\": \"Ansible\","
     "\"Description\": \"Provides functionality to observe and configure Ansible\","
@@ -232,7 +275,7 @@ int AnsibleMmiGet(MMI_HANDLE clientSession, const char* componentName, const cha
     }
     else if (!g_enabled)
     {
-        OsConfigLogError(AnsibleGetLog(), "MmiGet(%s, %s) called with missing dependencies", componentName, objectName);
+        OsConfigLogError(AnsibleGetLog(), "MmiGet(%s, %s) called outside of valid environment", componentName, objectName);
         status = EINVAL;
     }
     else if ((NULL == ansibleCollectionName) || (NULL == ansibleModuleName))
@@ -366,7 +409,7 @@ int AnsibleMmiSet(MMI_HANDLE clientSession, const char* componentName, const cha
     }
     else if (!g_enabled)
     {
-        OsConfigLogError(AnsibleGetLog(), "MmiSet(%s, %s) called with missing dependencies", componentName, objectName);
+        OsConfigLogError(AnsibleGetLog(), "MmiSet(%s, %s) called outside of valid environment", componentName, objectName);
         status = EINVAL;
     }
     else if ((NULL == ansibleCollectionName) || (NULL == ansibleModuleName))
