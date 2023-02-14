@@ -11,73 +11,6 @@
 
 #include "Ansible.h"
 #include "AnsibleUtils.h"
-#include "JsonUtils.h"
-
-// static const char* g_serviceComponentName = "Service";
-// static const char* g_userComponentName = "User";
-
-// static const char* g_serviceReportedObjectNames[] = {"rcctl", "systemd", "sysv", "upstart", "src"};
-// static const char* g_userReportedObjectNames[] = {"users", "groups"};
-
-// static const char* g_serviceDesiredObjectNames[] = {"desiredServices"};
-// static const char* g_userDesiredObjectNames[] = {"desiredUsers", "desiredGroups"};
-
-// static const char* g_serviceAnsibleCollectionName = "ansible.builtin";
-// static const char* g_userAnsibleCollectionName = "ansible.builtin";
-
-// static const char* g_serviceAnsibleModuleName = "ansible.service_facts";
-
-
-// Not call at all, to be generic?
-// Be in charge of calling multiple times?
-
-// get run it... 
-
-// What if you have an array, desiredservice, to run for many
-// What if you want to build reported from multipe assets
-
-typedef struct ANSIBLE_DESIRED_OBJECT {
-    const char componentName[64];
-    const char objectName[64];
-    const char ansibleCollectionName[64];
-    const char ansibleModuleName[64];
-    int (*const handler)(const struct ANSIBLE_DESIRED_OBJECT* object, const char* payload);
-} ANSIBLE_DESIRED_OBJECT;
-
-typedef struct ANSIBLE_REPORTED_OBJECT {
-    const char componentName[64];
-    const char objectName[64];
-    const char ansibleCollectionName[64];
-    const char ansibleModuleName[64];
-    const char ansibleModuleArguments[64];
-    int (*const handler)(const struct ANSIBLE_REPORTED_OBJECT* object, char** result);
-} ANSIBLE_REPORTED_OBJECT;
-
-static const ANSIBLE_REPORTED_OBJECT g_reportedObjects[] = {
-    {"Service", "systemd", "ansible.builtin", "service_facts", "", NULL},
-    {"Service", "src", "ansible.builtin", "service_facts", "", NULL},
-    {"User", "users", "ansible.builtin", "getent", "database=passwd", NULL}};
-
-typedef struct OBJECT_MAPPING
-{
-    const char mimComponentName[64];
-    const char mimObjectName[64];
-    const bool mimDesired;
-    const char ansibleCollectionName[64];
-    const char ansibleModuleName[64];
-    const char ansibleModuleArguments[64];
-} OBJECT_MAPPING;
-
-static const OBJECT_MAPPING g_objectMappings[] = {
-    {"Service", "rcctl", false, "ansible.builtin", "service_facts", ""},
-    {"Service", "systemd", false, "ansible.builtin", "service_facts", ""},
-    {"Service", "sysv", false, "ansible.builtin", "service_facts", ""},
-    {"Service", "upstart", false, "ansible.builtin", "service_facts", ""},
-    {"Service", "src", false, "ansible.builtin", "service_facts", ""},
-    {"Service", "desiredServices", true, "ansible.builtin", "service", ""},
-    {"User", "users", true, "ansible.builtin", "getent", "database=passwd"},
-    {"User", "groups", true, "ansible.builtin", "getent", "database=group"},
-    {"Docker", "images", false, "community.docker", "docker_image_info", ""}};
 
 static const char* g_ansibleModuleInfo = "{\"Name\": \"Ansible\","
     "\"Description\": \"Provides functionality to observe and configure Ansible\","
@@ -110,64 +43,13 @@ static bool AnsibleIsValidSession(MMI_HANDLE clientSession)
     return ((NULL == clientSession) || (0 != strcmp(g_ansibleModuleName, (char*)clientSession)) || (g_referenceCount <= 0)) ? false : true;
 }
 
-static const OBJECT_MAPPING* AnsibleGetObjectMapping(const char* componentName, const char* objectName, bool desired)
-{
-    for (size_t i = 0; i < ARRAY_SIZE(g_objectMappings); i++)
-    {
-        if ((0 == strcmp(g_objectMappings[i].mimComponentName, componentName)) &&
-            (0 == strcmp(g_objectMappings[i].mimObjectName, objectName)) &&
-            (g_objectMappings[i].mimDesired == desired))
-        {
-            return &g_objectMappings[i];
-        }
-    }
-    return NULL;
-}
-
-static const char* AnsibleGetCollectionName(const char* componentName, const char* objectName, bool desired)
-{
-    const OBJECT_MAPPING* objectMapping = NULL;
-    if (NULL != (objectMapping = AnsibleGetObjectMapping(componentName, objectName, desired)))
-    {
-        return objectMapping->ansibleCollectionName;
-    }
-    return NULL;
-}
-
-static const char* AnsibleGetModuleName(const char* componentName, const char* objectName, bool desired)
-{
-    const OBJECT_MAPPING* objectMapping = NULL;
-    if (NULL != (objectMapping = AnsibleGetObjectMapping(componentName, objectName, desired)))
-    {
-        return objectMapping->ansibleModuleName;
-    }
-    return NULL;
-}
-
-static const char* AnsibleGetModuleArguments(const char* componentName, const char* objectName, bool desired)
-{
-    const OBJECT_MAPPING* objectMapping = NULL;
-    if (NULL != (objectMapping = AnsibleGetObjectMapping(componentName, objectName, desired)))
-    {
-        return objectMapping->ansibleModuleArguments;
-    }
-    return NULL;
-}
-
 void AnsibleInitialize()
 {
     g_log = OpenLog(g_ansibleLogFile, g_ansibleRolledLogFile);
 
     if ((g_enabled = (MMI_OK == AnsibleCheckDependencies(AnsibleGetLog()))))
     {
-        for (size_t i = 0; i < ARRAY_SIZE(g_objectMappings); i++)
-        {
-            if (MMI_OK != AnsibleCheckCollection(g_objectMappings[i].ansibleCollectionName, AnsibleGetLog()))
-            {
-                g_enabled = false;
-                break;
-            }
-        }
+        // TODO: Call AnsibleCheckCollection(...).
     }
 
     if (!g_enabled)
@@ -264,9 +146,7 @@ int AnsibleMmiGet(MMI_HANDLE clientSession, const char* componentName, const cha
     *payload = NULL;
     *payloadSizeBytes = 0;
 
-    ansibleCollectionName = AnsibleGetCollectionName(componentName, objectName, false);
-    ansibleModuleName = AnsibleGetModuleName(componentName, objectName, false);
-    ansibleModuleArguments = AnsibleGetModuleArguments(componentName, objectName, false);
+    // TODO: Set ansibleCollectionName, ansibleModuleName, and ansibleModuleArguments.
 
     if (!AnsibleIsValidSession(clientSession))
     {
@@ -300,33 +180,9 @@ int AnsibleMmiGet(MMI_HANDLE clientSession, const char* componentName, const cha
     }
     else
     {
-        // Command result has been parsed and the variable can be repurposed.
         FREE_MEMORY(result);
 
-        if (0 == strcmp(componentName, "Service"))
-        {
-            resultValue = json_value_deep_copy(json_object_dotget_value(rootObject, "ansible_facts.services"));
-
-            if (NULL != resultValue)
-            {
-                RemoveObjectsWithPropertyValueNotEqual(resultValue, "source", objectName);
-                RemoveObjectsWithPropertyValueNotEqual(resultValue, "state", "running");
-                ConvertObjectArrayPropertyValueToArray(&resultValue, "name");
-            }
-            else
-            {
-                OsConfigLogError(AnsibleGetLog(), "MmiGet(%s, %s) failed to find JSON object '%s'", componentName, objectName, "ansible_facts.services");
-                status = EINVAL;
-            }
-        }
-        else if (0 == strcmp(componentName, "Docker"))
-        {
-            // TODO: ...
-        }
-        else if (0 == strcmp(componentName, "User"))
-        {
-            // TODO: ...
-        }
+        // TODO: Implement MmiGet.
 
         if (NULL != resultValue)
         {
@@ -388,7 +244,7 @@ int AnsibleMmiSet(MMI_HANDLE clientSession, const char* componentName, const cha
 
     const char* ansibleCollectionName = NULL;
     const char* ansibleModuleName = NULL;
-    char *ansibleModuleArguments = NULL;
+    char* ansibleModuleArguments = NULL;
 
     JSON_Value* rootValue = NULL;
 
@@ -399,8 +255,7 @@ int AnsibleMmiSet(MMI_HANDLE clientSession, const char* componentName, const cha
         return status;
     }
 
-    ansibleCollectionName = AnsibleGetCollectionName(componentName, objectName, true);
-    ansibleModuleName = AnsibleGetModuleName(componentName, objectName, true);
+    // TODO: Set ansibleCollectionName, ansibleModuleName, and ansibleModuleArguments.
 
     if (!AnsibleIsValidSession(clientSession))
     {
@@ -429,18 +284,7 @@ int AnsibleMmiSet(MMI_HANDLE clientSession, const char* componentName, const cha
 
         if (NULL != (rootValue = json_parse_string(buffer)))
         {
-            if (0 == strcmp(componentName, "Service"))
-            {
-                ConvertObjectArrayToKeyValuePairString(rootValue, &ansibleModuleArguments);
-            }
-            else if (0 == strcmp(componentName, "Docker"))
-            {
-                // TODO: ...
-            }
-            else if (0 == strcmp(componentName, "User"))
-            {
-                // TODO: ...
-            }
+            // TODO: Implement MmiSet.
 
             if ((NULL == ansibleModuleArguments) || (MMI_OK != AnsibleExecuteModule(ansibleCollectionName, ansibleModuleName, ansibleModuleArguments, NULL, AnsibleGetLog())))
             {

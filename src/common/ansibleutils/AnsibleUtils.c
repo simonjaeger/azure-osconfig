@@ -6,8 +6,6 @@
 #include <version.h>
 #include <CommonUtils.h>
 #include <Logging.h>
-#include <Mmi.h>
-#include <parson.h>
 
 #include "AnsibleUtils.h"
 
@@ -40,7 +38,7 @@ static const char* g_runAnsibleGalaxyCommand = " sh -c '. " PYTHON_ENVIRONMENT "
 
 int AnsibleCheckDependencies(void* log)
 {
-    int status = MMI_OK;
+    int status = 0;
     char* pythonVersion = NULL;
     char* pythonLocation = NULL;
     char* ansibleVersion = NULL;
@@ -135,7 +133,7 @@ int AnsibleCheckDependencies(void* log)
 
 int AnsibleCheckCollection(const char* collectionName, void* log)
 {
-    int status = MMI_OK;
+    int status = 0;
     char* commandBuffer = NULL;
     int commandBufferSizeBytes = 0;
 
@@ -187,7 +185,7 @@ int AnsibleCheckCollection(const char* collectionName, void* log)
 
 int AnsibleExecuteModule(const char* collectionName, const char* moduleName, const char* moduleArguments, char** result, void* log)
 {
-    int status = MMI_OK;
+    int status = 0;
     const char* format = NULL;
     char* commandBuffer = NULL;
     int commandBufferSizeBytes = 0;

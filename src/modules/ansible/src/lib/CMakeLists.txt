@@ -3,10 +3,10 @@
 
 project(ansiblelib)
 
-add_library(ansiblelib STATIC Ansible.c AnsibleUtils.c JsonUtils.c)
+add_library(ansiblelib STATIC Ansible.c)
 set_property(TARGET ansiblelib PROPERTY POSITION_INDEPENDENT_CODE ON)
 
-target_link_libraries(ansiblelib PRIVATE logging commonutils parsonlib)
+target_link_libraries(ansiblelib PRIVATE logging commonutils parsonlib ansibleutils)
 target_include_directories(ansiblelib
     PUBLIC
         ${MODULES_INC_DIR}
