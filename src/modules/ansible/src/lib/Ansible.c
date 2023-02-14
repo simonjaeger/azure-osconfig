@@ -146,6 +146,17 @@ int AnsibleMmiGet(MMI_HANDLE clientSession, const char* componentName, const cha
     *payload = NULL;
     *payloadSizeBytes = 0;
 
+    
+
+        char *tmp = NULL;
+
+        AnsibleExecuteModule("ansible.builtin", "service_facts", NULL, &tmp, AnsibleGetLog());
+        AnsibleExecuteModule("ansible.builtin", "service", "name='snapd.service' state='stopped'", NULL, AnsibleGetLog());
+
+        OsConfigLogInfo(AnsibleGetLog(), "%s", tmp);
+
+        FREE_MEMORY(tmp);
+
     // TODO: Set ansibleCollectionName, ansibleModuleName, and ansibleModuleArguments.
 
     if (!AnsibleIsValidSession(clientSession))

@@ -32,8 +32,7 @@ static const char* g_getAnsibleVersionCommand = "sh -c '. " PYTHON_ENVIRONMENT "
 static const char* g_getAnsibleLocationCommand = "sh -c '. " PYTHON_ENVIRONMENT "/bin/activate; which " ANSIBLE_EXECUTABLE "' | tr -d '\n'";
 static const char* g_getAnsibleGalaxyLocationCommand = "sh -c '. " PYTHON_ENVIRONMENT "/bin/activate; which " ANSIBLE_GALAXY_EXECUTABLE "' | tr -d '\n'";
 
-static const char* g_runAnsibleModuleCommand = "printf \"%s\"; sh -c '. " PYTHON_ENVIRONMENT "/bin/activate; " ANSIBLE_EXECUTABLE " localhost -m %s.%s -a \"%s\" -o 2> /dev/null' | grep -o '{.*'";
-static const char* g_runAnsibleModuleArgumentsCommand = "printf \"%s\" | xargs -I {} sh -c '. " PYTHON_ENVIRONMENT "/bin/activate; " ANSIBLE_EXECUTABLE " localhost -m %s.%s -a \"{}\" -o 2> /dev/null' | grep -o '{.*'";
+static const char* g_runAnsibleModuleCommand = "sh -c '. " PYTHON_ENVIRONMENT "/bin/activate; " ANSIBLE_EXECUTABLE " localhost -m %s.%s -a \"%s\" -o 2> /dev/null' | grep -o '{.*'";
 static const char* g_runAnsibleGalaxyCommand = " sh -c '. " PYTHON_ENVIRONMENT "/bin/activate; " ANSIBLE_GALAXY_EXECUTABLE " collection install %s'";
 
 int AnsibleCheckDependencies(void* log)
@@ -186,7 +185,6 @@ int AnsibleCheckCollection(const char* collectionName, void* log)
 int AnsibleExecuteModule(const char* collectionName, const char* moduleName, const char* moduleArguments, char** result, void* log)
 {
     int status = 0;
-    const char* format = NULL;
     char* commandBuffer = NULL;
     int commandBufferSizeBytes = 0;
     
@@ -200,14 +198,13 @@ int AnsibleExecuteModule(const char* collectionName, const char* moduleName, con
     }
     else 
     {
-        format = ((NULL != moduleArguments) && (strlen(moduleArguments) > 0)) ? g_runAnsibleModuleArgumentsCommand : g_runAnsibleModuleCommand;
-        commandBufferSizeBytes = snprintf(NULL, 0, format, ((NULL == moduleArguments) ? "" : moduleArguments), collectionName, moduleName);
+        commandBufferSizeBytes = snprintf(NULL, 0, g_runAnsibleModuleCommand, collectionName, moduleName, ((NULL == moduleArguments) ? "" : moduleArguments));
         commandBuffer = malloc(commandBufferSizeBytes + 1);
 
         if (NULL != commandBuffer)
         {
             memset(commandBuffer, 0, commandBufferSizeBytes + 1);
-            snprintf(commandBuffer, commandBufferSizeBytes + 1, format, ((NULL == moduleArguments) ? "" : moduleArguments), collectionName, moduleName);
+            snprintf(commandBuffer, commandBufferSizeBytes + 1, g_runAnsibleModuleCommand, collectionName, moduleName, ((NULL == moduleArguments) ? "" : moduleArguments));
 
             if ((0 != ExecuteCommand(NULL, commandBuffer, false, false, 0, 0, result, NULL, log)))
             {
